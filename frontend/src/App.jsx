@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 
 import { useEffect, useState } from "react";
+
 import {
   Users,
   FolderKanban,
@@ -16,17 +17,38 @@ import {
 
 import { Toaster } from "react-hot-toast";
 
+// ======================================
+// COMPONENTES
+// ======================================
+
 import Sidebar from "./components/Sidebar";
 import SidebarControl from "./components/SidebarControl";
+
+// ======================================
+// PÁGINAS
+// ======================================
 
 import Clientes from "./pages/Clientes";
 import Proyectos from "./pages/Proyectos";
 import Cotizaciones from "./pages/Cotizaciones";
 import Historial from "./pages/Historial";
 import ResumenControl from "./pages/ResumenControl";
+import Abonos from "./pages/Abonos";
+import EstadoCliente from "./pages/EstadoCliente";
+import EstadoCuentaCliente from "./pages/EstadoCuentaCliente";
+import ResumenMensual from "./pages/ResumenMensual";
+import ResumenAnual from "./pages/ResumenAnual";
+
+// ======================================
+// SERVICIOS Y UTILIDADES
+// ======================================
 
 import api from "./services/api";
 import notificaciones from "./utils/notificaciones";
+
+// ======================================
+// ESTILOS
+// ======================================
 
 import "./styles/global.css";
 
@@ -52,11 +74,15 @@ function Dashboard() {
           api.get("/cotizaciones"),
         ]);
 
-        setClientes(resClientes.data.total);
-        setProyectos(resProyectos.data.total);
-        setCotizaciones(resCotizaciones.data.total);
+        setClientes(resClientes.data.total || 0);
+        setProyectos(resProyectos.data.total || 0);
+        setCotizaciones(resCotizaciones.data.total || 0);
+
       } catch (error) {
-        console.error("Error al cargar el dashboard:", error);
+        console.error(
+          "Error al cargar el dashboard:",
+          error
+        );
 
         notificaciones.error(
           "No fue posible cargar los datos del dashboard."
@@ -72,7 +98,9 @@ function Dashboard() {
       <header className="topbar">
         <div>
           <h2>Dashboard</h2>
-          <p>Bienvenido al sistema administrativo de A&S</p>
+          <p>
+            Bienvenido al sistema administrativo de A&S
+          </p>
         </div>
 
         <div className="user-info">
@@ -92,6 +120,9 @@ function Dashboard() {
         </div>
 
         <div className="stats-grid">
+
+          {/* CLIENTES */}
+
           <div className="stat-card">
             <div className="stat-icon blue">
               <Users size={25} />
@@ -102,6 +133,8 @@ function Dashboard() {
               <h2>{clientes}</h2>
             </div>
           </div>
+
+          {/* PROYECTOS */}
 
           <div className="stat-card">
             <div className="stat-icon cyan">
@@ -114,6 +147,8 @@ function Dashboard() {
             </div>
           </div>
 
+          {/* COTIZACIONES */}
+
           <div className="stat-card">
             <div className="stat-icon blue">
               <FileText size={25} />
@@ -124,6 +159,7 @@ function Dashboard() {
               <h2>{cotizaciones}</h2>
             </div>
           </div>
+
         </div>
       </section>
     </>
@@ -158,9 +194,15 @@ function ContenidoApp() {
     <div className="app-container">
 
       {/* SIDEBAR SEGÚN EL PROGRAMA */}
-      {esControl ? <SidebarControl /> : <Sidebar />}
+
+      {esControl ? (
+        <SidebarControl />
+      ) : (
+        <Sidebar />
+      )}
 
       <main className="main-content">
+
         <Routes>
 
           {/* ==================================
@@ -217,79 +259,65 @@ function ContenidoApp() {
           />
 
           {/* RESUMEN GENERAL */}
+
           <Route
             path="/control/resumen"
             element={<ResumenControl />}
           />
 
           {/* CLIENTES COMPARTIDOS */}
+
           <Route
             path="/control/clientes"
             element={<Clientes />}
           />
 
           {/* PROYECTOS COMPARTIDOS */}
+
           <Route
             path="/control/proyectos"
             element={<Proyectos />}
           />
 
-          {/* ABONOS */}
+          {/* ABONOS Y ANTICIPOS */}
+
           <Route
             path="/control/abonos"
-            element={
-              <PaginaControl
-                titulo="Abonos"
-                descripcion="Aquí podrás registrar y consultar los abonos realizados por los clientes."
-              />
-            }
+            element={<Abonos />}
           />
 
-          {/* ESTADO DEL CLIENTE */}
+          {/* ESTADO ACTUAL POR CLIENTE */}
+
           <Route
             path="/control/estado-cliente"
-            element={
-              <PaginaControl
-                titulo="Estado del cliente"
-                descripcion="Consulta los saldos y movimientos de cada cliente."
-              />
-            }
+            element={<EstadoCliente />}
           />
 
-          {/* ESTADO DE CUENTA */}
+          {/* ESTADO DE CUENTA POR CLIENTE */}
+
           <Route
             path="/control/estado-cuenta"
-            element={
-              <PaginaControl
-                titulo="Estado de cuenta"
-                descripcion="Consulta el detalle de las cuentas por cobrar."
-              />
-            }
+            element={<EstadoCuentaCliente />}
           />
 
           {/* RESUMEN MENSUAL */}
+
           <Route
             path="/control/resumen-mensual"
-            element={
-              <PaginaControl
-                titulo="Resumen mensual"
-                descripcion="Visualiza los movimientos y cobros de cada mes."
-              />
-            }
+            element={<ResumenMensual />}
           />
 
           {/* RESUMEN ANUAL */}
+
           <Route
             path="/control/resumen-anual"
-            element={
-              <PaginaControl
-                titulo="Resumen anual"
-                descripcion="Visualiza el comportamiento anual de las cuentas por cobrar."
-              />
-            }
+            element={<ResumenAnual />}
           />
 
-          {/* RUTA NO ENCONTRADA */}
+          {/* ==================================
+              RUTA NO ENCONTRADA
+          ================================== */}
+
           <Route
             path="*"
             element={
@@ -301,9 +329,13 @@ function ContenidoApp() {
           />
 
         </Routes>
+
       </main>
 
-      {/* NOTIFICACIONES GLOBALES */}
+      {/* ==================================
+          NOTIFICACIONES GLOBALES
+      ================================== */}
+
       <Toaster
         position="top-right"
         reverseOrder={false}
@@ -340,6 +372,7 @@ function ContenidoApp() {
           },
         }}
       />
+
     </div>
   );
 }

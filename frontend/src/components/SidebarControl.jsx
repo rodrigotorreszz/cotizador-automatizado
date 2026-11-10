@@ -1,4 +1,6 @@
+
 import { NavLink, useNavigate } from "react-router-dom";
+
 import {
   LayoutDashboard,
   Users,
@@ -9,7 +11,6 @@ import {
   CalendarDays,
   CalendarRange,
   ArrowLeftRight,
-  Building2,
 } from "lucide-react";
 
 function SidebarControl() {
@@ -61,7 +62,11 @@ function SidebarControl() {
   return (
     <aside className="sidebar sidebar-control">
       <div className="sidebar-brand">
-        <Building2 size={32} />
+        <img
+          src="/Imagen%201.png"
+          alt="Logo A&S"
+          className="sidebar-logo"
+        />
 
         <div>
           <h2>CONTROL</h2>

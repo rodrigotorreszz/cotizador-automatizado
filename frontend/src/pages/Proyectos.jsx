@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import {
   Search,
@@ -16,15 +15,20 @@ import api from "../services/api";
 import "../styles/proyectos.css";
 import notificaciones from "../utils/notificaciones";
 
-// Estados disponibles para los proyectos
+// ==========================================
+// ESTADOS DISPONIBLES
+// ==========================================
+
 const estados = [
   "Pendiente",
-  "En proceso",
-  "Finalizado",
-  "Cancelado",
+  "Aprobado",
+  "Perdido",
 ];
 
-// Formulario inicial
+// ==========================================
+// FORMULARIO INICIAL
+// ==========================================
+
 const formularioInicial = {
   idCliente: "",
   proyecto: "",
@@ -43,6 +47,7 @@ function Proyectos() {
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const [error, setError] = useState("");
 
   // Confirmación personalizada de eliminación
@@ -107,7 +112,7 @@ function Proyectos() {
         proyecto.estado,
         nombreCliente,
       ].some((dato) =>
-        dato?.toLowerCase().includes(termino)
+        String(dato ?? "").toLowerCase().includes(termino)
       );
     });
   }, [proyectos, busqueda]);
@@ -131,7 +136,7 @@ function Proyectos() {
 
   const abrirNuevoProyecto = () => {
     setProyectoEditar(null);
-    setFormulario(formularioInicial);
+    setFormulario({ ...formularioInicial });
     setError("");
     setModalAbierto(true);
   };
@@ -150,7 +155,9 @@ function Proyectos() {
           : "",
       proyecto: proyecto.proyecto || "",
       ubicacion: proyecto.ubicacion || "",
-      estado: proyecto.estado || "Pendiente",
+      estado: estados.includes(proyecto.estado)
+        ? proyecto.estado
+        : "Pendiente",
     });
 
     setError("");
@@ -166,7 +173,7 @@ function Proyectos() {
 
     setModalAbierto(false);
     setProyectoEditar(null);
-    setFormulario(formularioInicial);
+    setFormulario({ ...formularioInicial });
     setError("");
   };
 
@@ -195,13 +202,17 @@ function Proyectos() {
         await api.put(
           `/proyectos/${proyectoEditar.idProyecto}`,
           {
-            proyecto: formulario.proyecto,
-            ubicacion: formulario.ubicacion,
+            proyecto: formulario.proyecto.trim(),
+            ubicacion: formulario.ubicacion.trim(),
             estado: formulario.estado,
           }
         );
       } else {
-        await api.post("/proyectos", formulario);
+        await api.post("/proyectos", {
+          ...formulario,
+          proyecto: formulario.proyecto.trim(),
+          ubicacion: formulario.ubicacion.trim(),
+        });
       }
 
       notificaciones.cerrar(idToast);
@@ -214,7 +225,7 @@ function Proyectos() {
 
       setModalAbierto(false);
       setProyectoEditar(null);
-      setFormulario(formularioInicial);
+      setFormulario({ ...formularioInicial });
 
       await cargarDatos();
 
@@ -249,6 +260,8 @@ function Proyectos() {
   // ==========================================
 
   const cancelarEliminarProyecto = () => {
+    if (eliminando) return;
+
     setProyectoPendienteEliminar(null);
   };
 
@@ -257,7 +270,7 @@ function Proyectos() {
   // ==========================================
 
   const eliminarProyecto = async () => {
-    if (!proyectoPendienteEliminar) return;
+    if (!proyectoPendienteEliminar || eliminando) return;
 
     const proyecto = proyectoPendienteEliminar;
 
@@ -266,6 +279,8 @@ function Proyectos() {
     );
 
     try {
+      setEliminando(true);
+
       await api.delete(
         `/proyectos/${proyecto.idProyecto}`
       );
@@ -291,6 +306,9 @@ function Proyectos() {
         "No fue posible eliminar el proyecto.";
 
       notificaciones.error(mensajeError);
+
+    } finally {
+      setEliminando(false);
     }
   };
 
@@ -316,6 +334,20 @@ function Proyectos() {
     }
 
     return "";
+  };
+
+  // ==========================================
+  // OBTENER CLASE DEL ESTADO
+  // ==========================================
+
+  const obtenerClaseEstado = (estado) => {
+    const clases = {
+      Pendiente: "estado-pendiente",
+      Aprobado: "estado-aprobado",
+      Perdido: "estado-perdido",
+    };
+
+    return clases[estado] || "estado-pendiente";
   };
 
   // ==========================================
@@ -471,18 +503,18 @@ function Proyectos() {
                     <td>
                       <div className="proyecto-ubicacion">
                         <MapPin size={15} />
-                        {proyecto.ubicacion}
+                        {proyecto.ubicacion || "Sin ubicación registrada"}
                       </div>
                     </td>
 
                     {/* ESTADO */}
                     <td>
                       <span
-                        className={`proyecto-estado estado-${proyecto.estado
-                          ?.toLowerCase()
-                          .replaceAll(" ", "-")}`}
+                        className={`proyecto-estado ${obtenerClaseEstado(
+                          proyecto.estado
+                        )}`}
                       >
-                        {proyecto.estado}
+                        {proyecto.estado || "Pendiente"}
                       </span>
                     </td>
 
@@ -728,7 +760,10 @@ function Proyectos() {
         <div
           className="as-confirmacion-overlay"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
+            if (
+              e.target === e.currentTarget &&
+              !eliminando
+            ) {
               cancelarEliminarProyecto();
             }
           }}
@@ -763,6 +798,7 @@ function Proyectos() {
                 type="button"
                 className="as-confirmacion-cancelar"
                 onClick={cancelarEliminarProyecto}
+                disabled={eliminando}
               >
                 Cancelar
               </button>
@@ -771,8 +807,19 @@ function Proyectos() {
                 type="button"
                 className="as-confirmacion-eliminar"
                 onClick={eliminarProyecto}
+                disabled={eliminando}
               >
-                Sí, eliminar
+                {eliminando ? (
+                  <>
+                    <LoaderCircle
+                      className="proyectos-spinner"
+                      size={16}
+                    />
+                    Eliminando...
+                  </>
+                ) : (
+                  "Sí, eliminar"
+                )}
               </button>
 
             </div>

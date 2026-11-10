@@ -3,7 +3,6 @@ import {
   Users,
   FolderKanban,
   History,
-  Building2,
   FileText,
   ArrowLeftRight,
 } from "lucide-react";
@@ -37,7 +36,11 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <Building2 size={32} />
+        <img
+          src="/Imagen%201.png"
+          alt="Logo A&S"
+          className="sidebar-logo"
+        />
 
         <div>
           <h2>A&S</h2>

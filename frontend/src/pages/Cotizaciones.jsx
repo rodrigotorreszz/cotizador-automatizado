@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
@@ -66,6 +67,9 @@ function Cotizaciones() {
     fecha: fechaActual(),
     porcentajeIVA: 13,
     estado: "Borrador",
+    anticipo: "",
+    entrega: "",
+    validez: "15 días",
     conceptos: [conceptoVacio()],
   });
 
@@ -88,6 +92,7 @@ function Cotizaciones() {
       setProyectos(respuestaProyectos.data.proyectos || []);
     } catch (error) {
       console.error("Error al cargar cotizaciones:", error);
+
       notificaciones.error(
         error.response?.data?.message ||
           "No se pudieron cargar los datos de cotizaciones."
@@ -141,6 +146,7 @@ function Cotizaciones() {
     );
   });
 
+  // NUEVA COTIZACIÓN
   const abrirNuevaCotizacion = () => {
     setCotizacionEditando(null);
 
@@ -150,12 +156,16 @@ function Cotizaciones() {
       fecha: fechaActual(),
       porcentajeIVA: 13,
       estado: "Borrador",
+      anticipo: "",
+      entrega: "",
+      validez: "15 días",
       conceptos: [conceptoVacio()],
     });
 
     setModalAbierto(true);
   };
 
+  // EDITAR COTIZACIÓN
   const abrirEdicion = (cotizacion) => {
     setCotizacionEditando(cotizacion);
 
@@ -167,6 +177,12 @@ function Cotizaciones() {
         : fechaActual(),
       porcentajeIVA: cotizacion.porcentajeIVA ?? 13,
       estado: cotizacion.estado || "Borrador",
+
+      // CONDICIONES INDIVIDUALES
+      anticipo: cotizacion.anticipo || "",
+      entrega: cotizacion.entrega || "",
+      validez: cotizacion.validez || "15 días",
+
       conceptos: cotizacion.conceptos?.length
         ? cotizacion.conceptos.map((concepto) => ({
             descripcion: concepto.descripcion || "",
@@ -220,6 +236,7 @@ function Cotizaciones() {
     }));
   };
 
+  // GUARDAR COTIZACIÓN
   const guardarCotizacion = async (evento) => {
     evento.preventDefault();
 
@@ -248,6 +265,12 @@ function Cotizaciones() {
       fecha: formulario.fecha,
       porcentajeIVA: Number(formulario.porcentajeIVA),
       estado: formulario.estado,
+
+      // CONDICIONES DE ESTA COTIZACIÓN
+      anticipo: formulario.anticipo.trim(),
+      entrega: formulario.entrega.trim(),
+      validez: formulario.validez.trim(),
+
       conceptos: formulario.conceptos.map((concepto) => ({
         descripcion: concepto.descripcion.trim(),
         cantidad: Number(concepto.cantidad),
@@ -265,14 +288,17 @@ function Cotizaciones() {
         notificaciones.exito("Cotización actualizada correctamente.");
       } else {
         await api.post("/cotizaciones", datos);
+
         notificaciones.exito("Cotización creada correctamente.");
       }
 
       setModalAbierto(false);
       setCotizacionEditando(null);
+
       await cargarDatos();
     } catch (error) {
       console.error("Error al guardar cotización:", error);
+
       notificaciones.error(
         error.response?.data?.message ||
           "No se pudo guardar la cotización."
@@ -280,6 +306,7 @@ function Cotizaciones() {
     }
   };
 
+  // ELIMINAR COTIZACIÓN
   const confirmarEliminacion = async () => {
     if (!cotizacionEliminar) return;
 
@@ -289,10 +316,13 @@ function Cotizaciones() {
       );
 
       notificaciones.exito("Cotización eliminada correctamente.");
+
       setCotizacionEliminar(null);
+
       await cargarDatos();
     } catch (error) {
       console.error("Error al eliminar cotización:", error);
+
       notificaciones.error(
         error.response?.data?.message ||
           "No se pudo eliminar la cotización."
@@ -311,6 +341,7 @@ function Cotizaciones() {
     return clases[estado] || "borrador";
   };
 
+  // DOCUMENTO
   const abrirDocumento = (cotizacion) => {
     setOpcionesDocumento({
       cliente: true,
@@ -333,6 +364,7 @@ function Cotizaciones() {
     }));
   };
 
+  // GENERAR PDF
   const descargarPDF = async () => {
     if (!Object.values(opcionesDocumento).some(Boolean)) {
       notificaciones.error(
@@ -353,10 +385,11 @@ function Cotizaciones() {
     try {
       setGenerandoPDF(true);
 
-      const codigo = cotizacionDocumento?.idCotizacion || "Cotizacion";
+      const codigo =
+        cotizacionDocumento?.idCotizacion || "Cotizacion";
 
       const opciones = {
-        margin: [10, 10, 10, 10],
+        margin: [5, 5, 5, 5],
         filename: `Cotizacion-${codigo}.pdf`,
         image: {
           type: "jpeg",
@@ -367,29 +400,27 @@ function Cotizaciones() {
           useCORS: true,
           backgroundColor: "#FFFFFF",
           logging: false,
+          windowWidth: 1200,
         },
         jsPDF: {
           unit: "mm",
           format: "a4",
-          orientation: "portrait",
+          orientation: "landscape",
         },
         pagebreak: {
           mode: ["css", "legacy"],
-          avoid: [
-            ".cotizacion-documento-encabezado",
-            ".cotizacion-documento-bloque",
-            ".cotizacion-documento-totales",
-            ".cotizacion-documento-pie",
-            "tr",
-          ],
         },
       };
 
-      await html2pdf().set(opciones).from(elemento).save();
+      await html2pdf()
+        .set(opciones)
+        .from(elemento)
+        .save();
 
       notificaciones.exito("PDF descargado correctamente.");
     } catch (error) {
       console.error("Error al generar PDF:", error);
+
       notificaciones.error("No se pudo generar el PDF.");
     } finally {
       setGenerandoPDF(false);
@@ -404,8 +435,12 @@ function Cotizaciones() {
     <main className="cotizaciones-page">
       <section className="cotizaciones-encabezado">
         <div>
-          <span className="cotizaciones-etiqueta">GESTIÓN COMERCIAL</span>
+          <span className="cotizaciones-etiqueta">
+            GESTIÓN COMERCIAL
+          </span>
+
           <h1>Cotizaciones</h1>
+
           <p>
             Crea, administra y consulta las cotizaciones de tus clientes.
           </p>
@@ -425,6 +460,7 @@ function Cotizaciones() {
           <div className="cotizacion-resumen-icono azul">
             <FileText size={22} />
           </div>
+
           <div>
             <span>Total de cotizaciones</span>
             <strong>{cotizaciones.length}</strong>
@@ -435,6 +471,7 @@ function Cotizaciones() {
           <div className="cotizacion-resumen-icono verde">
             <ClipboardList size={22} />
           </div>
+
           <div>
             <span>Aceptadas</span>
             <strong>
@@ -447,6 +484,7 @@ function Cotizaciones() {
           <div className="cotizacion-resumen-icono naranja">
             <Calculator size={22} />
           </div>
+
           <div>
             <span>Enviadas</span>
             <strong>
@@ -465,6 +503,7 @@ function Cotizaciones() {
 
           <div className="cotizaciones-busqueda">
             <Search size={18} />
+
             <input
               type="text"
               placeholder="Buscar por código, cliente o proyecto..."
@@ -483,11 +522,13 @@ function Cotizaciones() {
           <div className="cotizaciones-vacio">
             <FileText size={42} />
             <h3>No hay cotizaciones</h3>
+
             <p>
               {busqueda
                 ? "No se encontraron resultados para tu búsqueda."
                 : "Todavía no has registrado ninguna cotización."}
             </p>
+
             {!busqueda && (
               <button
                 className="cotizacion-btn-principal"
@@ -521,20 +562,24 @@ function Cotizaciones() {
                         {cotizacion.idCotizacion}
                       </strong>
                     </td>
+
                     <td>
                       <div className="cotizacion-cliente-celda">
                         <UserRound size={17} />
                         {cotizacion.idCliente?.nombre || "Sin cliente"}
                       </div>
                     </td>
+
                     <td>
                       {cotizacion.idProyecto?.proyecto || "Sin proyecto"}
                     </td>
+
                     <td>
                       {cotizacion.fecha
                         ? new Date(cotizacion.fecha).toLocaleDateString("es-SV")
                         : "—"}
                     </td>
+
                     <td>
                       <span
                         className={`cotizacion-estado ${obtenerClaseEstado(
@@ -544,9 +589,11 @@ function Cotizaciones() {
                         {cotizacion.estado || "Borrador"}
                       </span>
                     </td>
+
                     <td className="cotizacion-total-celda">
                       {formatoDinero(cotizacion.totalGeneral)}
                     </td>
+
                     <td>
                       <div className="cotizacion-acciones">
                         <button
@@ -583,25 +630,34 @@ function Cotizaciones() {
         )}
       </section>
 
+      {/* MODAL CREAR / EDITAR */}
       {modalAbierto && (
         <div
           className="cotizacion-modal-overlay"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setModalAbierto(false);
+            if (e.target === e.currentTarget) {
+              setModalAbierto(false);
+            }
           }}
         >
           <section className="cotizacion-modal">
             <header className="cotizacion-modal-header">
               <div>
                 <span className="cotizaciones-etiqueta">
-                  {cotizacionEditando ? "ACTUALIZAR REGISTRO" : "NUEVO REGISTRO"}
+                  {cotizacionEditando
+                    ? "ACTUALIZAR REGISTRO"
+                    : "NUEVO REGISTRO"}
                 </span>
+
                 <h2>
                   {cotizacionEditando
                     ? "Editar cotización"
                     : "Crear cotización"}
                 </h2>
-                <p>Completa los datos y agrega los conceptos necesarios.</p>
+
+                <p>
+                  Completa los datos y agrega los conceptos necesarios.
+                </p>
               </div>
 
               <button
@@ -624,8 +680,10 @@ function Cotizaciones() {
                 <div className="cotizacion-form-grid">
                   <label className="cotizacion-campo">
                     <span>Cliente *</span>
+
                     <div className="cotizacion-input-icono">
                       <UserRound size={17} />
+
                       <select
                         value={formulario.idCliente}
                         onChange={(e) => {
@@ -635,6 +693,7 @@ function Cotizaciones() {
                         required
                       >
                         <option value="">Selecciona un cliente</option>
+
                         {clientes.map((cliente) => (
                           <option
                             key={cliente._id}
@@ -644,14 +703,17 @@ function Cotizaciones() {
                           </option>
                         ))}
                       </select>
+
                       <ChevronDown size={16} />
                     </div>
                   </label>
 
                   <label className="cotizacion-campo">
                     <span>Proyecto (opcional)</span>
+
                     <div className="cotizacion-input-icono">
                       <FolderKanban size={17} />
+
                       <select
                         value={formulario.idProyecto}
                         onChange={(e) =>
@@ -660,6 +722,7 @@ function Cotizaciones() {
                         disabled={!formulario.idCliente}
                       >
                         <option value="">Sin proyecto asociado</option>
+
                         {proyectosDelCliente.map((proyecto) => (
                           <option
                             key={proyecto._id}
@@ -669,14 +732,17 @@ function Cotizaciones() {
                           </option>
                         ))}
                       </select>
+
                       <ChevronDown size={16} />
                     </div>
                   </label>
 
                   <label className="cotizacion-campo">
                     <span>Fecha</span>
+
                     <div className="cotizacion-input-icono">
                       <CalendarDays size={17} />
+
                       <input
                         type="date"
                         value={formulario.fecha}
@@ -690,8 +756,10 @@ function Cotizaciones() {
 
                   <label className="cotizacion-campo">
                     <span>Estado</span>
+
                     <div className="cotizacion-input-icono">
                       <ClipboardList size={17} />
+
                       <select
                         value={formulario.estado}
                         onChange={(e) =>
@@ -703,8 +771,56 @@ function Cotizaciones() {
                         <option value="Aceptada">Aceptada</option>
                         <option value="Rechazada">Rechazada</option>
                       </select>
+
                       <ChevronDown size={16} />
                     </div>
+                  </label>
+                </div>
+
+                {/* CONDICIONES EDITABLES POR COTIZACIÓN */}
+                <div className="cotizacion-seccion-titulo cotizacion-conceptos-titulo">
+                  <FileText size={19} />
+                  <h3>Condiciones de la cotización</h3>
+                </div>
+
+                <div className="cotizacion-form-grid cotizacion-condiciones-grid">
+                  <label className="cotizacion-campo">
+                    <span>Anticipo</span>
+
+                    <textarea
+                      rows="2"
+                      placeholder="Ej. 70% al iniciar, 20% durante la instalación y 10% al finalizar"
+                      value={formulario.anticipo}
+                      onChange={(e) =>
+                        actualizarCampo("anticipo", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label className="cotizacion-campo">
+                    <span>Tiempo de entrega</span>
+
+                    <input
+                      type="text"
+                      placeholder="Ej. 30 a 40 días hábiles"
+                      value={formulario.entrega}
+                      onChange={(e) =>
+                        actualizarCampo("entrega", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label className="cotizacion-campo">
+                    <span>Validez de la oferta</span>
+
+                    <input
+                      type="text"
+                      placeholder="Ej. 15 días"
+                      value={formulario.validez}
+                      onChange={(e) =>
+                        actualizarCampo("validez", e.target.value)
+                      }
+                    />
                   </label>
                 </div>
 
@@ -725,16 +841,14 @@ function Cotizaciones() {
                       (Number(concepto.precioUnitario) || 0);
 
                     return (
-                      <div
-                        className="cotizacion-concepto"
-                        key={indice}
-                      >
+                      <div className="cotizacion-concepto" key={indice}>
                         <div className="cotizacion-concepto-numero">
                           {String(indice + 1).padStart(2, "0")}
                         </div>
 
                         <label className="cotizacion-campo concepto-descripcion">
                           <span>Descripción</span>
+
                           <input
                             type="text"
                             placeholder="Ej. Ventanas de aluminio natural"
@@ -752,6 +866,7 @@ function Cotizaciones() {
 
                         <label className="cotizacion-campo concepto-cantidad">
                           <span>Cantidad</span>
+
                           <input
                             type="number"
                             min="0.01"
@@ -770,6 +885,7 @@ function Cotizaciones() {
 
                         <label className="cotizacion-campo concepto-precio">
                           <span>Precio unitario ($)</span>
+
                           <input
                             type="number"
                             min="0"
@@ -816,6 +932,7 @@ function Cotizaciones() {
                 <div className="cotizacion-resumen-final">
                   <div className="cotizacion-iva-control">
                     <label htmlFor="porcentajeIVA">IVA (%)</label>
+
                     <input
                       id="porcentajeIVA"
                       type="number"
@@ -833,10 +950,12 @@ function Cotizaciones() {
                       <span>Subtotal</span>
                       <strong>{formatoDinero(subtotal)}</strong>
                     </div>
+
                     <div>
                       <span>IVA ({formulario.porcentajeIVA || 0}%)</span>
                       <strong>{formatoDinero(iva)}</strong>
                     </div>
+
                     <div className="cotizacion-total-final">
                       <span>Total general</span>
                       <strong>{formatoDinero(totalGeneral)}</strong>
@@ -859,6 +978,7 @@ function Cotizaciones() {
                   className="cotizacion-btn-principal"
                 >
                   <Save size={18} />
+
                   {cotizacionEditando
                     ? "Guardar cambios"
                     : "Guardar cotización"}
@@ -869,6 +989,7 @@ function Cotizaciones() {
         </div>
       )}
 
+      {/* MODAL DEL DOCUMENTO */}
       {cotizacionDocumento && (
         <div
           className="cotizacion-modal-overlay cotizacion-documento-overlay"
@@ -884,7 +1005,9 @@ function Cotizaciones() {
                 <span className="cotizaciones-etiqueta">
                   DOCUMENTO PARA CLIENTE
                 </span>
+
                 <h2>Generar cotización</h2>
+
                 <p>
                   Selecciona la información que deseas incluir en el documento.
                 </p>
@@ -927,83 +1050,111 @@ function Cotizaciones() {
                 ))}
               </div>
 
+              {/* DOCUMENTO PDF */}
               <div className="cotizacion-documento-vista">
-                <div className="cotizacion-documento-encabezado">
-                  <div>
-                    <h2>A&S</h2>
-                    <p>ALUMINIO Y VIDRIO</p>
+                <div className="pdf-plantilla-encabezado">
+                  <div className="pdf-logo">
+                    <strong>A&S</strong>
+                    <span>ALUMINIO Y VIDRIO</span>
                   </div>
 
-                  <div className="cotizacion-documento-numero">
-                    <strong>COTIZACIÓN</strong>
-                    <span>{cotizacionDocumento.idCotizacion}</span>
-                    <small>{fechaDocumento}</small>
+                  <div className="pdf-empresa">
+                    <h2>ACABADOS Y SERVICIOS S.A. DE C.V.</h2>
+                    <p>
+                      Sistemas de Aluminio y Vidrio | Tel: 2226-0408 |
+                      E-mail: acabados_y_servicios@yahoo.com
+                    </p>
+                    <p>
+                      Quinta avenida norte y 31 calle poniente número 413,
+                      San Salvador
+                    </p>
+                  </div>
+
+                  <div className="pdf-titulo">
+                    <h2>COTIZACIONES</h2>
+                    <strong>{cotizacionDocumento.idCotizacion}</strong>
+                    <span>{fechaDocumento}</span>
                   </div>
                 </div>
 
-                <div className="cotizacion-documento-linea" />
+                <div className="pdf-linea" />
 
-                {opcionesDocumento.cliente && (
-                  <section className="cotizacion-documento-bloque">
-                    <h3>Información del cliente</h3>
-                    <p>
-                      <strong>Cliente:</strong>{" "}
-                      {cotizacionDocumento.idCliente?.nombre ||
-                        "Sin información"}
-                    </p>
-                    {cotizacionDocumento.idCliente?.direccion && (
-                      <p>
-                        <strong>Dirección:</strong>{" "}
-                        {cotizacionDocumento.idCliente.direccion}
-                      </p>
-                    )}
-                    {cotizacionDocumento.idCliente?.telefono && (
-                      <p>
-                        <strong>Teléfono:</strong>{" "}
-                        {cotizacionDocumento.idCliente.telefono}
-                      </p>
-                    )}
-                    {cotizacionDocumento.idCliente?.correo && (
-                      <p>
-                        <strong>Correo:</strong>{" "}
-                        {cotizacionDocumento.idCliente.correo}
-                      </p>
-                    )}
-                  </section>
-                )}
+                <div className="pdf-datos-grid">
+                  {opcionesDocumento.cliente && (
+                    <section className="pdf-datos-bloque">
+                      <h3>DATOS DEL CLIENTE</h3>
 
-                {opcionesDocumento.proyecto && (
-                  <section className="cotizacion-documento-bloque">
-                    <h3>Información del proyecto</h3>
-                    <p>
-                      <strong>Proyecto:</strong>{" "}
-                      {cotizacionDocumento.idProyecto?.proyecto ||
-                        "Sin proyecto asociado"}
-                    </p>
-                    {cotizacionDocumento.idProyecto?.ubicacion && (
                       <p>
-                        <strong>Ubicación:</strong>{" "}
-                        {cotizacionDocumento.idProyecto.ubicacion}
+                        <strong>ID CLIENTE:</strong>{" "}
+                        {cotizacionDocumento.idCliente?.idCliente || "—"}
                       </p>
-                    )}
-                  </section>
-                )}
+
+                      <p>
+                        <strong>EMPRESA:</strong>{" "}
+                        {cotizacionDocumento.idCliente?.nombre || "—"}
+                      </p>
+
+                      <p>
+                        <strong>ATENCIÓN A:</strong>{" "}
+                        {cotizacionDocumento.idCliente?.atencionA || "—"}
+                      </p>
+
+                      <p>
+                        <strong>TELÉFONO:</strong>{" "}
+                        {cotizacionDocumento.idCliente?.telefono || "—"}
+                      </p>
+
+                      <p>
+                        <strong>DIRECCIÓN:</strong>{" "}
+                        {cotizacionDocumento.idCliente?.direccion || "—"}
+                      </p>
+                    </section>
+                  )}
+
+                  {opcionesDocumento.proyecto && (
+                    <section className="pdf-datos-bloque">
+                      <h3>DATOS DEL PROYECTO</h3>
+
+                      <p>
+                        <strong>ID PROYECTO:</strong>{" "}
+                        {cotizacionDocumento.idProyecto?.idProyecto || "—"}
+                      </p>
+
+                      <p>
+                        <strong>PROYECTO:</strong>{" "}
+                        {cotizacionDocumento.idProyecto?.proyecto || "—"}
+                      </p>
+
+                      <p>
+                        <strong>UBICACIÓN:</strong>{" "}
+                        {cotizacionDocumento.idProyecto?.ubicacion || "—"}
+                      </p>
+
+                      <p>
+                        <strong>FECHA:</strong> {fechaDocumento}
+                      </p>
+                    </section>
+                  )}
+                </div>
 
                 {opcionesDocumento.conceptos && (
-                  <section className="cotizacion-documento-bloque">
-                    <h3>Detalle de la cotización</h3>
+                  <section className="pdf-detalle">
+                    <h3>DETALLE DE LA COTIZACIÓN</h3>
 
-                    <table className="cotizacion-documento-tabla">
+                    <table className="pdf-tabla">
                       <thead>
                         <tr>
-                          <th>Descripción</th>
+                          <th>ÍTEM</th>
+                          <th>DESCRIPCIÓN</th>
+
                           {opcionesDocumento.cantidades && (
-                            <th>Cantidad</th>
+                            <th>CANTIDAD</th>
                           )}
+
                           {opcionesDocumento.precios && (
                             <>
-                              <th>Precio unitario</th>
-                              <th>Importe</th>
+                              <th>PRECIO UNITARIO</th>
+                              <th>PRECIO TOTAL</th>
                             </>
                           )}
                         </tr>
@@ -1013,10 +1164,13 @@ function Cotizaciones() {
                         {cotizacionDocumento.conceptos?.map(
                           (concepto, indice) => (
                             <tr key={concepto._id || indice}>
+                              <td>{indice + 1}</td>
                               <td>{concepto.descripcion}</td>
+
                               {opcionesDocumento.cantidades && (
                                 <td>{concepto.cantidad}</td>
                               )}
+
                               {opcionesDocumento.precios && (
                                 <>
                                   <td>
@@ -1024,6 +1178,7 @@ function Cotizaciones() {
                                       concepto.precioUnitario
                                     )}
                                   </td>
+
                                   <td>
                                     {formatoDinero(
                                       Number(concepto.cantidad) *
@@ -1040,40 +1195,163 @@ function Cotizaciones() {
                   </section>
                 )}
 
-                <div className="cotizacion-documento-totales">
-                  {opcionesDocumento.subtotal && (
-                    <p>
-                      <span>Subtotal</span>
-                      <strong>
-                        {formatoDinero(cotizacionDocumento.subtotal)}
-                      </strong>
-                    </p>
-                  )}
+                <div className="pdf-parte-inferior">
+                  <section className="pdf-condiciones-comerciales">
+                    <h3>CONDICIONES COMERCIALES</h3>
 
-                  {opcionesDocumento.iva && (
                     <p>
-                      <span>
-                        IVA ({cotizacionDocumento.porcentajeIVA ?? 13}%)
-                      </span>
-                      <strong>
-                        {formatoDinero(cotizacionDocumento.iva)}
-                      </strong>
+                      <strong>ANTICIPO:</strong>{" "}
+                      {cotizacionDocumento.anticipo || "No especificado"}
                     </p>
-                  )}
 
-                  {opcionesDocumento.total && (
-                    <p className="cotizacion-documento-total">
-                      <span>Total general</span>
-                      <strong>
-                        {formatoDinero(cotizacionDocumento.totalGeneral)}
-                      </strong>
+                    <p>
+                      <strong>ENTREGA:</strong>{" "}
+                      {cotizacionDocumento.entrega || "No especificado"}
                     </p>
-                  )}
+
+                    <p>
+                      <strong>VALIDEZ:</strong>{" "}
+                      {cotizacionDocumento.validez || "No especificada"}
+                    </p>
+                  </section>
+
+                  <section className="pdf-totales">
+                    {opcionesDocumento.subtotal && (
+                      <p>
+                        <span>SUBTOTAL</span>
+                        <strong>
+                          {formatoDinero(cotizacionDocumento.subtotal)}
+                        </strong>
+                      </p>
+                    )}
+
+                    {opcionesDocumento.iva && (
+                      <p>
+                        <span>
+                          IVA ({cotizacionDocumento.porcentajeIVA ?? 13}%)
+                        </span>
+                        <strong>
+                          {formatoDinero(cotizacionDocumento.iva)}
+                        </strong>
+                      </p>
+                    )}
+
+                    {opcionesDocumento.total && (
+                      <p className="pdf-total-general">
+                        <span>TOTAL GENERAL</span>
+                        <strong>
+                          {formatoDinero(cotizacionDocumento.totalGeneral)}
+                        </strong>
+                      </p>
+                    )}
+                  </section>
                 </div>
 
-                <div className="cotizacion-documento-pie">
-                  <p>Gracias por considerar nuestros servicios.</p>
-                  <strong>A&S Aluminio y Vidrio</strong>
+                <section className="pdf-condiciones-generales">
+                  <h3>CONDICIONES GENERALES DEL CONTRATO</h3>
+
+                  <div className="pdf-condiciones-columnas">
+                    <div>
+                      <p>
+                        <strong>A)</strong> El Cliente pagará el valor de este
+                        contrato de acuerdo con los términos y condiciones
+                        contratadas.
+                      </p>
+
+                      <p>
+                        <strong>B)</strong> El Cliente autoriza los trabajos
+                        de acuerdo con lo expresado en la presente cotización,
+                        con los valores y medidas acordadas.
+                      </p>
+
+                      <p>
+                        <strong>C)</strong> El tiempo de ejecución se realizará
+                        en días y horas hábiles. Los trabajos nocturnos podrán
+                        generar costos adicionales.
+                      </p>
+
+                      <p>
+                        <strong>D)</strong> El cliente deberá proveer un lugar
+                        seguro para el almacenamiento de materiales y
+                        herramientas.
+                      </p>
+
+                      <p>
+                        <strong>E)</strong> El cliente proveerá alimentación
+                        eléctrica para las herramientas a una distancia
+                        máxima de 25 m.
+                      </p>
+
+                      <p>
+                        <strong>F)</strong> El cliente deberá mantener el área
+                        de trabajo libre de materiales u objetos que impidan
+                        la instalación.
+                      </p>
+
+                      <p>
+                        <strong>G)</strong> La fecha de inicio se confirmará
+                        después de recibido el anticipo e incluido el proyecto
+                        en la programación.
+                      </p>
+                    </div>
+
+                    <div>
+                      <p>
+                        <strong>H)</strong> Una vez cancelado el anticipo, el
+                        proyecto deberá ejecutarse en un plazo no mayor a 90
+                        días o según lo negociado.
+                      </p>
+
+                      <p>
+                        <strong>I)</strong> Si se requiere devolución del
+                        anticipo, la empresa se reserva el derecho de retener
+                        el 10 % por operaciones realizadas.
+                      </p>
+
+                      <p>
+                        <strong>J)</strong> El material será propiedad de
+                        ACABADOS Y SERVICIOS S.A. DE C.V. mientras no haya sido
+                        cancelado en su totalidad.
+                      </p>
+
+                      <p>
+                        <strong>K)</strong> Se brinda garantía de un año en
+                        instalaciones y 10 años en materiales, excluyendo
+                        vidrio, bajo las condiciones establecidas.
+                      </p>
+
+                      <p>
+                        <strong>L)</strong> Los materiales cuentan con garantía
+                        contra desperfectos de fabricación según las políticas
+                        del fabricante.
+                      </p>
+
+                      <p>
+                        <strong>M)</strong> La empresa se reserva el dominio
+                        de lo vendido mientras no esté totalmente pagado.
+                      </p>
+
+                      <p>
+                        <strong>N)</strong> La validez de esta oferta será la
+                        indicada en las condiciones comerciales de esta
+                        cotización.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="pdf-firmas">
+                  <div>
+                    <span />
+                    <strong>CLIENTE</strong>
+                    <small>Nombre y firma</small>
+                  </div>
+
+                  <div>
+                    <span />
+                    <strong>ACABADOS Y SERVICIOS S.A. DE C.V.</strong>
+                    <small>Firma autorizada</small>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1094,13 +1372,17 @@ function Cotizaciones() {
                 disabled={generandoPDF}
               >
                 <FileDown size={18} />
-                {generandoPDF ? "Generando PDF..." : "Descargar PDF"}
+
+                {generandoPDF
+                  ? "Generando PDF..."
+                  : "Descargar PDF"}
               </button>
             </footer>
           </section>
         </div>
       )}
 
+      {/* CONFIRMACIÓN DE ELIMINACIÓN */}
       {cotizacionEliminar && (
         <div className="as-confirmacion-overlay">
           <section className="as-confirmacion-modal">
@@ -1109,6 +1391,7 @@ function Cotizaciones() {
             </div>
 
             <h2>¿Eliminar cotización?</h2>
+
             <p>
               ¿Estás seguro de que deseas eliminar la cotización{" "}
               <strong>{cotizacionEliminar.idCotizacion}</strong>? Esta acción
@@ -1122,6 +1405,7 @@ function Cotizaciones() {
               >
                 Cancelar
               </button>
+
               <button
                 className="as-confirmacion-eliminar"
                 onClick={confirmarEliminacion}

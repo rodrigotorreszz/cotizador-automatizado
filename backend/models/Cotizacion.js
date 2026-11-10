@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const conceptoSchema = new mongoose.Schema(
@@ -55,6 +54,24 @@ const cotizacionSchema = new mongoose.Schema(
         message: "La cotización debe tener al menos un concepto.",
       },
     },
+
+    // Condiciones particulares de cada cotización
+    anticipo: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    entrega: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    validez: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     subtotal: {
       type: Number,
       required: true,

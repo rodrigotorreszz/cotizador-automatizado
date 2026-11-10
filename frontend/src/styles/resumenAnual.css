@@ -1,0 +1,526 @@
+
+/* ======================================
+   RESUMEN ANUAL - A&S
+====================================== */
+
+.resumen-anual-page {
+  width: 100%;
+  padding: 30px;
+  background: #f5f7fb;
+  min-height: 100vh;
+  font-family: "Inter", sans-serif;
+  color: #071b3d;
+}
+
+/* ENCABEZADO */
+
+.resumen-anual-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.resumen-anual-etiqueta {
+  color: #0878d1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.resumen-anual-header h1 {
+  font-size: 29px;
+  font-weight: 800;
+  margin: 7px 0;
+  color: #071b3d;
+}
+
+.resumen-anual-header p {
+  color: #718096;
+  font-size: 14px;
+  margin: 0;
+}
+
+.resumen-anual-refresh {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 17px;
+  border: none;
+  border-radius: 9px;
+  background: #0878d1;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.resumen-anual-refresh:hover {
+  background: #0564b3;
+  transform: translateY(-1px);
+}
+
+.resumen-anual-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* SELECTOR DE AÑO */
+
+.resumen-anual-selector {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 19px 22px;
+  background: white;
+  border: 1px solid #e7edf5;
+  border-radius: 13px;
+  margin-bottom: 23px;
+  box-shadow: 0 3px 12px rgba(7, 27, 61, 0.035);
+}
+
+.resumen-anual-selector-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8f3ff;
+  color: #0878d1;
+}
+
+.resumen-anual-selector-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.resumen-anual-selector-text label {
+  font-size: 14px;
+  font-weight: 800;
+  color: #071b3d;
+}
+
+.resumen-anual-selector-text span {
+  font-size: 12px;
+  color: #8492a6;
+}
+
+.resumen-anual-selector select {
+  min-width: 130px;
+  padding: 11px 14px;
+  border: 1px solid #dce5f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #071b3d;
+  font-size: 14px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+}
+
+.resumen-anual-selector select:focus {
+  border-color: #0878d1;
+  box-shadow: 0 0 0 3px rgba(8, 120, 209, 0.1);
+}
+
+/* TARJETAS */
+
+.resumen-anual-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 17px;
+  margin-bottom: 20px;
+}
+
+.resumen-anual-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  padding: 21px 18px;
+  background: white;
+  border: 1px solid #e7edf5;
+  border-radius: 13px;
+  box-shadow: 0 3px 12px rgba(7, 27, 61, 0.035);
+}
+
+.resumen-anual-card-icon {
+  width: 43px;
+  height: 43px;
+  min-width: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+}
+
+.resumen-anual-card-icon.azul {
+  background: #e7f2ff;
+  color: #0878d1;
+}
+
+.resumen-anual-card-icon.naranja {
+  background: #fff2e5;
+  color: #e58a24;
+}
+
+.resumen-anual-card-icon.celeste {
+  background: #e5f8fc;
+  color: #0799bd;
+}
+
+.resumen-anual-card-icon.verde {
+  background: #e7f8ef;
+  color: #16a36a;
+}
+
+.resumen-anual-card span {
+  display: block;
+  color: #728096;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.resumen-anual-card h2 {
+  font-size: 19px;
+  font-weight: 800;
+  color: #071b3d;
+  margin: 0 0 7px;
+  overflow-wrap: anywhere;
+}
+
+.resumen-anual-card small {
+  font-size: 10px;
+  color: #9aa6b7;
+}
+
+/* SALDOS */
+
+.resumen-anual-saldos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+  margin-bottom: 25px;
+}
+
+.resumen-anual-saldo-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 22px 24px;
+  background: white;
+  border: 1px solid #e7edf5;
+  border-radius: 13px;
+  box-shadow: 0 3px 12px rgba(7, 27, 61, 0.035);
+}
+
+.resumen-anual-saldo-card span {
+  display: block;
+  color: #728096;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 9px;
+}
+
+.resumen-anual-saldo-card h2 {
+  margin: 0 0 7px;
+  color: #071b3d;
+  font-size: 25px;
+  font-weight: 800;
+}
+
+.resumen-anual-saldo-card small {
+  color: #9aa6b7;
+  font-size: 11px;
+}
+
+.saldo-icono {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.saldo-icono.azul {
+  color: #0878d1;
+  background: #e7f2ff;
+}
+
+.saldo-icono.verde {
+  color: #16a36a;
+  background: #e7f8ef;
+}
+
+/* TABLA */
+
+.resumen-anual-tabla-contenedor {
+  background: white;
+  border: 1px solid #e7edf5;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 3px 12px rgba(7, 27, 61, 0.035);
+}
+
+.resumen-anual-tabla-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 23px;
+}
+
+.resumen-anual-tabla-header h2 {
+  color: #071b3d;
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.resumen-anual-tabla-header p {
+  color: #8793a5;
+  font-size: 12px;
+  margin: 0;
+}
+
+.resumen-anual-busqueda {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 260px;
+  padding: 10px 13px;
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  color: #8793a5;
+}
+
+.resumen-anual-busqueda:focus-within {
+  border-color: #0878d1;
+  box-shadow: 0 0 0 3px rgba(8, 120, 209, 0.08);
+}
+
+.resumen-anual-busqueda input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #071b3d;
+  font-size: 12px;
+}
+
+.resumen-anual-busqueda input::placeholder {
+  color: #a3adba;
+}
+
+.resumen-anual-tabla-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.resumen-anual-tabla {
+  width: 100%;
+  min-width: 1150px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.resumen-anual-tabla thead {
+  background: #f3f7fc;
+}
+
+.resumen-anual-tabla th {
+  padding: 15px 14px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  border-top: 1px solid #eaf0f6;
+  border-bottom: 1px solid #eaf0f6;
+}
+
+.resumen-anual-tabla td {
+  padding: 16px 14px;
+  color: #526176;
+  font-size: 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.resumen-anual-tabla tbody tr {
+  transition: background 0.2s;
+}
+
+.resumen-anual-tabla tbody tr:hover {
+  background: #f8fbff;
+}
+
+.resumen-anual-id {
+  display: inline-block;
+  padding: 5px 8px;
+  background: #eaf3ff;
+  color: #0878d1;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.resumen-anual-nombre {
+  color: #071b3d !important;
+  font-weight: 700;
+}
+
+.resumen-anual-cobrado {
+  color: #0878d1 !important;
+  font-weight: 800;
+}
+
+.resumen-anual-positivo {
+  color: #16865c !important;
+  font-weight: 700;
+}
+
+.resumen-anual-negativo {
+  color: #dc4b4b !important;
+  font-weight: 700;
+}
+
+.resumen-anual-proyectos {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0878d1;
+  font-weight: 700;
+}
+
+.resumen-anual-tabla tfoot {
+  background: #f1f6fc;
+}
+
+.resumen-anual-tabla tfoot td {
+  padding: 17px 14px;
+  color: #071b3d;
+  font-size: 11px;
+  font-weight: 800;
+  border-top: 2px solid #dce8f5;
+  border-bottom: none;
+}
+
+.resumen-anual-tabla-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 15px 22px;
+  color: #8a97a8;
+  font-size: 11px;
+  background: #fff;
+}
+
+/* ESTADOS */
+
+.resumen-anual-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 17px;
+  margin-bottom: 20px;
+  border: 1px solid #f4cccc;
+  border-radius: 9px;
+  background: #fff1f1;
+  color: #c33e3e;
+  font-size: 13px;
+}
+
+.resumen-anual-vacio {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.girando {
+  animation: resumenGirar 1s linear infinite;
+}
+
+@keyframes resumenGirar {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 1100px) {
+  .resumen-anual-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .resumen-anual-page {
+    padding: 18px 13px;
+  }
+
+  .resumen-anual-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .resumen-anual-header h1 {
+    font-size: 24px;
+  }
+
+  .resumen-anual-selector {
+    flex-wrap: wrap;
+    padding: 15px;
+  }
+
+  .resumen-anual-selector select {
+    width: 100%;
+  }
+
+  .resumen-anual-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .resumen-anual-saldos {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .resumen-anual-saldo-card h2 {
+    font-size: 21px;
+  }
+
+  .resumen-anual-tabla-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px;
+  }
+
+  .resumen-anual-busqueda {
+    width: 100%;
+  }
+
+  .resumen-anual-tabla-footer {
+    flex-direction: column;
+  }
+}

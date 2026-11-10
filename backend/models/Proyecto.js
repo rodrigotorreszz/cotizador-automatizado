@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const proyectoSchema = new mongoose.Schema(
@@ -37,9 +36,8 @@ const proyectoSchema = new mongoose.Schema(
       type: String,
       enum: [
         "Pendiente",
-        "En proceso",
-        "Finalizado",
-        "Cancelado"
+        "Aprobado",
+        "Perdido"
       ],
       default: "Pendiente"
     }
