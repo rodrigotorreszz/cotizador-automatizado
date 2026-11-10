@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -22,9 +23,11 @@ const app = express();
 
 const PORT = process.env.PORT || 4000;
 
+// Orígenes autorizados
 const origenesPermitidos = [
   "http://localhost:5173",
   "http://localhost:5174",
+  "http://127.0.0.1:4173",
 ];
 
 // ========================================
@@ -34,7 +37,13 @@ const origenesPermitidos = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || origenesPermitidos.includes(origin)) {
+      // Permitir solicitudes sin origen
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Verificar si el origen está autorizado
+      if (origenesPermitidos.includes(origin)) {
         return callback(null, true);
       }
 
@@ -112,7 +121,7 @@ const startServer = async () => {
       console.log("------------------------------------");
       console.log("A&S ALUMINIO Y VIDRIO");
       console.log("------------------------------------");
-      console.log(`Servidor activo: http://localhost:${PORT}`);
+      console.log(`Servidor activo en puerto: ${PORT}`);
       console.log("------------------------------------");
     });
   } catch (error) {
