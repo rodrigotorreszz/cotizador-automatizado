@@ -1,472 +1,754 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
 import {
-  Search,
   Plus,
-  Pencil,
+  Save,
   Trash2,
-  X,
+  RefreshCw,
   Users,
-  Mail,
-  Phone,
-  MapPin,
-  LoaderCircle,
+  Search,
+  X,
 } from "lucide-react";
+
+import Swal from "sweetalert2";
+import "sweetalert2/dist/sweetalert2.min.css";
 
 import api from "../services/api";
 import "../styles/clientes.css";
-import notificaciones from "../utils/notificaciones";
 
-// Departamentos de El Salvador
-const departamentos = [
-  "Ahuachapán",
-  "Santa Ana",
-  "Sonsonate",
-  "Chalatenango",
-  "La Libertad",
-  "San Salvador",
-  "Cuscatlán",
-  "La Paz",
-  "Cabañas",
-  "San Vicente",
-  "Usulután",
-  "San Miguel",
-  "Morazán",
-  "La Unión",
-];
+// ==========================================
+// CONFIGURACIÓN INICIAL
+// ==========================================
 
-// Formulario inicial
-const formularioInicial = {
-  nombre: "",
+const clienteInicial = {
+  idCliente: "",
+  empresa: "",
   direccion: "",
-  subdireccion: "",
-  registroFiscal: "",
-  nit: "",
   telefono: "",
-  correo: "",
+  email: "",
   atencionA: "",
 };
+
+// Evitar errores cuando un valor sea undefined o null
+const obtenerTexto = (valor) => String(valor ?? "").trim();
+
+// Capitalizar cada palabra
+const capitalizar = (valor) =>
+  String(valor ?? "")
+    .toLowerCase()
+    .replace(/\b\p{L}/gu, (letra) => letra.toUpperCase());
+
+// ==========================================
+// GENERAR ID VISUAL
+// ==========================================
+
+function generarId(clientes) {
+  const numeros = clientes.map((cliente) => {
+    const coincidencia = String(cliente.idCliente || "").match(/CLI-(\d+)/);
+
+    return coincidencia ? Number(coincidencia[1]) : 0;
+  });
+
+  const siguiente = Math.max(0, ...numeros) + 1;
+
+  return `CLI-${String(siguiente).padStart(3, "0")}`;
+}
+
+// ==========================================
+// NORMALIZAR DATOS DE MONGODB
+// ==========================================
+
+function normalizarCliente(cliente) {
+  return {
+    ...cliente,
+
+    idCliente: cliente.idCliente || "",
+
+    // MongoDB utiliza nombre
+    empresa: cliente.empresa ?? cliente.nombre ?? "",
+
+    direccion: cliente.direccion ?? "",
+
+    telefono: cliente.telefono ?? "",
+
+    // MongoDB utiliza correo
+    email: cliente.email ?? cliente.correo ?? "",
+
+    atencionA: cliente.atencionA ?? "",
+  };
+}
+
+// ==========================================
+// PREPARAR DATOS PARA EL BACKEND
+// ==========================================
+
+function prepararDatos(cliente) {
+  return {
+    idCliente: obtenerTexto(cliente.idCliente),
+
+    // Coincidir con el modelo de MongoDB
+    nombre: capitalizar(cliente.empresa),
+
+    direccion: capitalizar(cliente.direccion),
+
+    telefono: obtenerTexto(cliente.telefono),
+
+    correo: obtenerTexto(cliente.email).toLowerCase(),
+
+    atencionA: capitalizar(cliente.atencionA),
+  };
+}
+
+// ==========================================
+// COMPONENTE PRINCIPAL
+// ==========================================
 
 function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
-
-  const [modalAbierto, setModalAbierto] = useState(false);
-  const [clienteEditar, setClienteEditar] = useState(null);
-  const [formulario, setFormulario] = useState(formularioInicial);
-
   const [cargando, setCargando] = useState(true);
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(null);
+  const [filaNueva, setFilaNueva] = useState(null);
 
-  // ==========================================
+  // ========================================
   // CARGAR CLIENTES
-  // ==========================================
+  // ========================================
 
-  const cargarClientes = async () => {
+  const cargarClientes = useCallback(async () => {
     try {
       setCargando(true);
-      setError("");
 
       const respuesta = await api.get("/clientes");
 
-      setClientes(respuesta.data.clientes || []);
-    } catch (err) {
-      console.error("Error al cargar clientes:", err);
+      const datos = Array.isArray(respuesta.data)
+        ? respuesta.data
+        : respuesta.data?.clientes || [];
 
-      setError(
-        "No fue posible cargar los clientes. Verifica el backend."
-      );
+      const clientesNormalizados = datos.map(normalizarCliente);
 
-      notificaciones.error(
-        "No fue posible cargar los clientes."
-      );
+      setClientes(clientesNormalizados);
+
+    } catch (error) {
+      console.error("Error al cargar clientes:", error);
+
+      Swal.fire({
+        icon: "error",
+        title: "Error al cargar clientes",
+        text:
+          error.response?.data?.message ||
+          "No se pudieron obtener los clientes del servidor.",
+      });
+
     } finally {
       setCargando(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     cargarClientes();
-  }, []);
+  }, [cargarClientes]);
 
-  // ==========================================
-  // BUSCADOR DE CLIENTES
-  // ==========================================
+  // ========================================
+  // ACTUALIZAR CAMPOS DE CLIENTES
+  // ========================================
 
-  const clientesFiltrados = useMemo(() => {
-    const termino = busqueda.toLowerCase().trim();
-
-    if (!termino) return clientes;
-
-    return clientes.filter((cliente) =>
-      [
-        cliente.idCliente,
-        cliente.nombre,
-        cliente.telefono,
-        cliente.correo,
-        cliente.direccion,
-      ].some((dato) =>
-        dato?.toLowerCase().includes(termino)
+  const actualizarCampo = (id, campo, valor) => {
+    setClientes((actuales) =>
+      actuales.map((cliente) =>
+        cliente.idCliente === id
+          ? {
+              ...cliente,
+              [campo]: valor,
+            }
+          : cliente
       )
     );
-  }, [clientes, busqueda]);
+  };
 
-  // ==========================================
-  // CAMBIAR CAMPOS DEL FORMULARIO
-  // ==========================================
+  // ========================================
+  // ACTUALIZAR FILA NUEVA
+  // ========================================
 
-  const cambiarCampo = (e) => {
-    const { name, value } = e.target;
-
-    setFormulario((anterior) => ({
-      ...anterior,
-      [name]: value,
+  const actualizarCampoNuevo = (campo, valor) => {
+    setFilaNueva((actual) => ({
+      ...actual,
+      [campo]: valor,
     }));
   };
 
-  // ==========================================
-  // ABRIR MODAL PARA NUEVO CLIENTE
-  // ==========================================
+  // ========================================
+  // VALIDACIONES
+  // ========================================
 
-  const abrirNuevoCliente = () => {
-    setClienteEditar(null);
-    setFormulario(formularioInicial);
-    setError("");
-    setModalAbierto(true);
+  const validarCliente = (cliente) => {
+    const telefono = obtenerTexto(cliente.telefono);
+    const email = obtenerTexto(cliente.email);
+
+    if (telefono && !/^\d{8}$/.test(telefono)) {
+      Swal.fire({
+        icon: "warning",
+        title: "Teléfono inválido",
+        text: "El teléfono debe contener exactamente 8 números.",
+      });
+
+      return false;
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      Swal.fire({
+        icon: "warning",
+        title: "Correo inválido",
+        text: "Ingresá un correo electrónico válido.",
+      });
+
+      return false;
+    }
+
+    return true;
   };
 
-  // ==========================================
-  // ABRIR MODAL PARA EDITAR CLIENTE
-  // ==========================================
+  // ========================================
+  // AGREGAR NUEVA FILA
+  // ========================================
 
-  const abrirEditarCliente = (cliente) => {
-    setClienteEditar(cliente);
+  const agregarFila = () => {
+    if (filaNueva) {
+      Swal.fire({
+        icon: "info",
+        title: "Fila pendiente",
+        text: "Primero guardá o cancelá el cliente que estás agregando.",
+      });
 
-    setFormulario({
-      nombre: cliente.nombre || "",
-      direccion: cliente.direccion || "",
-      subdireccion: cliente.subdireccion || "",
-      registroFiscal: cliente.registroFiscal || "",
-      nit: cliente.nit || "",
-      telefono: cliente.telefono || "",
-      correo: cliente.correo || "",
-      atencionA: cliente.atencionA || "",
+      return;
+    }
+
+    setFilaNueva({
+      ...clienteInicial,
+      idCliente: generarId(clientes),
     });
-
-    setError("");
-    setModalAbierto(true);
   };
 
-  // ==========================================
-  // CERRAR MODAL
-  // ==========================================
+  // ========================================
+  // CANCELAR NUEVO CLIENTE
+  // ========================================
 
-  const cerrarModal = () => {
-    if (guardando) return;
-
-    setModalAbierto(false);
-    setClienteEditar(null);
-    setFormulario(formularioInicial);
-    setError("");
+  const cancelarNuevo = () => {
+    setFilaNueva(null);
   };
 
-  // ==========================================
-  // REGISTRAR O ACTUALIZAR CLIENTE
-  // ==========================================
+  // ========================================
+  // REGISTRAR NUEVO CLIENTE
+  // ========================================
 
-  const guardarCliente = async (e) => {
-    e.preventDefault();
+  const guardarNuevo = async () => {
+    if (!filaNueva) return;
 
-    if (guardando) return;
-
-    const editando = Boolean(clienteEditar);
-
-    const idToast = notificaciones.carga(
-      editando
-        ? "Actualizando cliente..."
-        : "Registrando cliente..."
-    );
+    if (!validarCliente(filaNueva)) return;
 
     try {
-      setGuardando(true);
-      setError("");
+      setGuardando("nuevo");
 
-      if (editando) {
-        await api.put(
-          `/clientes/${clienteEditar.idCliente}`,
-          formulario
-        );
-      } else {
-        await api.post("/clientes", formulario);
-      }
+      const datos = prepararDatos(filaNueva);
 
-      // Cerrar alerta de carga
-      notificaciones.cerrar(idToast);
+      const respuesta = await api.post("/clientes", datos);
 
-      // Mostrar alerta de éxito
-      notificaciones.exito(
-        editando
-          ? "¡Cliente actualizado correctamente!"
-          : "¡Cliente registrado correctamente!"
-      );
+      setFilaNueva(null);
 
-      // Limpiar formulario y cerrar modal
-      setModalAbierto(false);
-      setClienteEditar(null);
-      setFormulario(formularioInicial);
-
-      // Actualizar la tabla
       await cargarClientes();
 
-    } catch (err) {
-      notificaciones.cerrar(idToast);
+      Swal.fire({
+        icon: "success",
+        title: "Cliente agregado",
+        text:
+          respuesta.data?.message ||
+          "El cliente se guardó correctamente.",
+        timer: 1800,
+        showConfirmButton: false,
+      });
 
-      console.error("Error al guardar cliente:", err);
+    } catch (error) {
+      console.error("Error al crear cliente:", error);
 
-      const mensajeError =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        "No fue posible guardar el cliente. Revisa los datos.";
-
-      setError(mensajeError);
-
-      notificaciones.error(mensajeError);
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo registrar",
+        text:
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Ocurrió un problema al guardar el cliente.",
+      });
 
     } finally {
-      setGuardando(false);
+      setGuardando(null);
     }
   };
 
-  // ==========================================
+  // ========================================
+  // ACTUALIZAR CLIENTE
+  // ========================================
+
+  const guardarCliente = async (cliente) => {
+    if (!validarCliente(cliente)) return;
+
+    try {
+      setGuardando(cliente.idCliente);
+
+      const datos = prepararDatos(cliente);
+
+      // El backend busca mediante idCliente, no mediante _id
+      const respuesta = await api.put(
+        `/clientes/${encodeURIComponent(cliente.idCliente)}`,
+        datos
+      );
+
+      await cargarClientes();
+
+      Swal.fire({
+        icon: "success",
+        title: "Cambios guardados",
+        text:
+          respuesta.data?.message ||
+          "El cliente se actualizó correctamente.",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+    } catch (error) {
+      console.error("Error al actualizar cliente:", error);
+
+      Swal.fire({
+        icon: "error",
+        title: "Error al actualizar",
+        text:
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          "No se pudieron guardar los cambios.",
+      });
+
+    } finally {
+      setGuardando(null);
+    }
+  };
+
+  // ========================================
   // ELIMINAR CLIENTE
-  // ==========================================
+  // ========================================
 
   const eliminarCliente = async (cliente) => {
-    const confirmar = window.confirm(
-      `¿Estás seguro de eliminar a ${cliente.nombre}?`
-    );
+    const confirmacion = await Swal.fire({
+      title: "¿Eliminar cliente?",
+      text: `Se eliminará el registro ${cliente.idCliente}.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+    });
 
-    if (!confirmar) return;
-
-    const idToast = notificaciones.carga(
-      "Eliminando cliente..."
-    );
+    if (!confirmacion.isConfirmed) return;
 
     try {
       await api.delete(
-        `/clientes/${cliente.idCliente}`
+        `/clientes/${encodeURIComponent(cliente.idCliente)}`
       );
 
-      notificaciones.cerrar(idToast);
-
-      notificaciones.exito(
-        "¡Cliente eliminado correctamente!"
-      );
-
-      // Actualizar la tabla
       await cargarClientes();
 
-    } catch (err) {
-      notificaciones.cerrar(idToast);
+      Swal.fire({
+        icon: "success",
+        title: "Cliente eliminado",
+        text: "El registro se eliminó correctamente.",
+        timer: 1500,
+        showConfirmButton: false,
+      });
 
-      console.error("Error al eliminar cliente:", err);
+    } catch (error) {
+      console.error("Error al eliminar cliente:", error);
 
-      const mensajeError =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        "No fue posible eliminar el cliente.";
-
-      notificaciones.error(mensajeError);
+      Swal.fire({
+        icon: "error",
+        title: "Error al eliminar",
+        text:
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          "No se pudo eliminar el cliente.",
+      });
     }
   };
 
-  // ==========================================
+  // ========================================
+  // BUSCADOR
+  // ========================================
+
+  const clientesFiltrados = clientes.filter((cliente) => {
+    const texto = busqueda.toLowerCase().trim();
+
+    return [
+      cliente.idCliente,
+      cliente.empresa,
+      cliente.direccion,
+      cliente.telefono,
+      cliente.email,
+      cliente.atencionA,
+    ].some((valor) =>
+      String(valor || "").toLowerCase().includes(texto)
+    );
+  });
+
+  // ========================================
   // INTERFAZ
-  // ==========================================
+  // ========================================
 
   return (
     <div className="clientes-page">
 
       {/* ENCABEZADO */}
+
       <div className="clientes-header">
         <div>
+          <span className="clientes-etiqueta">
+            GESTIÓN COMERCIAL
+          </span>
+
           <h1>Clientes</h1>
+
           <p>
-            Administra la información de tus clientes y empresas.
+            Administrá la información de tus clientes.
           </p>
         </div>
 
-        <button
-          className="btn-primary"
-          onClick={abrirNuevoCliente}
-        >
-          <Plus size={19} />
-          Nuevo cliente
-        </button>
+        <div className="clientes-header-actions">
+
+          <button
+            type="button"
+            className="btn-clientes-secundario"
+            onClick={cargarClientes}
+            disabled={cargando}
+          >
+            <RefreshCw
+              size={17}
+              className={cargando ? "clientes-rotando" : ""}
+            />
+
+            Actualizar
+          </button>
+
+          <button
+            type="button"
+            className="btn-clientes-agregar"
+            onClick={agregarFila}
+            disabled={Boolean(filaNueva)}
+          >
+            <Plus size={18} />
+
+            Nuevo cliente
+          </button>
+
+        </div>
       </div>
 
       {/* RESUMEN */}
+
       <div className="clientes-resumen">
-        <div className="resumen-icono">
-          <Users size={25} />
+
+        <div className="clientes-resumen-icono">
+          <Users size={23} />
         </div>
 
         <div>
           <span>Total de clientes</span>
-          <h2>{clientes.length}</h2>
+
+          <strong>{clientes.length}</strong>
         </div>
+
       </div>
 
-      {/* PANEL PRINCIPAL */}
-      <div className="clientes-panel">
+      {/* TABLA */}
 
-        {/* ENCABEZADO DEL PANEL */}
-        <div className="clientes-panel-header">
+      <div className="clientes-tabla-contenedor">
+
+        {/* BARRA SUPERIOR */}
+
+        <div className="clientes-tabla-toolbar">
+
           <div>
             <h2>Directorio de clientes</h2>
-            <p>
-              Consulta y administra tus clientes registrados.
-            </p>
+
+            <span>
+              {clientesFiltrados.length} registros encontrados
+            </span>
           </div>
 
-          {/* BUSCADOR */}
-          <div className="buscador-clientes">
-            <Search size={18} />
+          <div className="clientes-buscador">
+            <Search size={17} />
 
             <input
               type="text"
               placeholder="Buscar cliente..."
               value={busqueda}
-              onChange={(e) =>
-                setBusqueda(e.target.value)
-              }
+              onChange={(e) => setBusqueda(e.target.value)}
             />
           </div>
+
         </div>
 
-        {/* ERROR DE CARGA */}
-        {error && !modalAbierto && (
-          <div className="alerta alerta-error">
-            {error}
+        {/* TABLA RESPONSIVE */}
 
-            <button onClick={() => setError("")}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
+        <div className="clientes-tabla-scroll">
 
-        {/* CARGANDO */}
-        {cargando ? (
-          <div className="estado-carga">
-            <LoaderCircle
-              className="spinner"
-              size={28}
-            />
-            <p>Cargando clientes...</p>
-          </div>
+          <table className="clientes-tabla">
 
-        ) : clientesFiltrados.length === 0 ? (
+            <thead>
+              <tr>
+                <th>ID CLIENTE</th>
+                <th>EMPRESA</th>
+                <th>DIRECCIÓN</th>
+                <th>TELÉFONO</th>
+                <th>E-MAIL</th>
+                <th>ATENCIÓN A</th>
+              </tr>
+            </thead>
 
-          /* SIN RESULTADOS */
-          <div className="estado-vacio">
-            <Users size={38} />
+            <tbody>
 
-            <h3>
-              {busqueda
-                ? "No se encontraron clientes"
-                : "Todavía no hay clientes"}
-            </h3>
+              {/* NUEVO CLIENTE */}
 
-            <p>
-              {busqueda
-                ? "Prueba con otro término de búsqueda."
-                : "Registra tu primer cliente para comenzar."}
-            </p>
-          </div>
+              {filaNueva && (
+                <tr className="fila-nueva">
 
-        ) : (
+                  <td>
+                    <span className="cliente-id">
+                      {filaNueva.idCliente}
+                    </span>
+                  </td>
 
-          /* TABLA DE CLIENTES */
-          <div className="tabla-contenedor">
-            <table className="tabla-clientes">
+                  <td>
+                    <input
+                      autoFocus
+                      value={filaNueva.empresa}
+                      placeholder="Empresa"
+                      onChange={(e) =>
+                        actualizarCampoNuevo(
+                          "empresa",
+                          e.target.value
+                        )
+                      }
+                    />
+                  </td>
 
-              <thead>
-                <tr>
-                  <th>CÓDIGO</th>
-                  <th>CLIENTE / EMPRESA</th>
-                  <th>CONTACTO</th>
-                  <th>UBICACIÓN</th>
-                  <th>ACCIONES</th>
+                  <td>
+                    <input
+                      value={filaNueva.direccion}
+                      placeholder="Dirección"
+                      onChange={(e) =>
+                        actualizarCampoNuevo(
+                          "direccion",
+                          e.target.value
+                        )
+                      }
+                    />
+                  </td>
+
+                  <td>
+                    <input
+                      value={filaNueva.telefono}
+                      placeholder="00000000"
+                      maxLength={8}
+                      inputMode="numeric"
+                      onChange={(e) =>
+                        actualizarCampoNuevo(
+                          "telefono",
+                          e.target.value.replace(/\D/g, "").slice(0, 8)
+                        )
+                      }
+                    />
+                  </td>
+
+                  <td>
+                    <input
+                      type="email"
+                      value={filaNueva.email}
+                      placeholder="correo@empresa.com"
+                      onChange={(e) =>
+                        actualizarCampoNuevo(
+                          "email",
+                          e.target.value
+                        )
+                      }
+                    />
+                  </td>
+
+                  <td>
+                    <div className="celda-atencion">
+
+                      <input
+                        value={filaNueva.atencionA}
+                        placeholder="Persona de contacto"
+                        onChange={(e) =>
+                          actualizarCampoNuevo(
+                            "atencionA",
+                            e.target.value
+                          )
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        className="btn-tabla-guardar"
+                        onClick={guardarNuevo}
+                        disabled={guardando === "nuevo"}
+                        title="Guardar cliente"
+                      >
+                        <Save size={17} />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn-tabla-cancelar"
+                        onClick={cancelarNuevo}
+                        title="Cancelar"
+                      >
+                        <X size={17} />
+                      </button>
+
+                    </div>
+                  </td>
+
                 </tr>
-              </thead>
+              )}
 
-              <tbody>
-                {clientesFiltrados.map((cliente) => (
-                  <tr key={cliente._id}>
+              {/* CARGANDO */}
 
-                    {/* CÓDIGO */}
+              {cargando ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="clientes-estado-tabla"
+                  >
+                    Cargando clientes...
+                  </td>
+                </tr>
+
+              ) : clientesFiltrados.length === 0 && !filaNueva ? (
+
+                /* SIN RESULTADOS */
+
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="clientes-estado-tabla"
+                  >
+                    {busqueda
+                      ? "No se encontraron clientes con esa búsqueda."
+                      : "No hay clientes registrados."}
+                  </td>
+                </tr>
+
+              ) : (
+
+                /* CLIENTES REGISTRADOS */
+
+                clientesFiltrados.map((cliente) => (
+
+                  <tr key={cliente._id || cliente.idCliente}>
+
                     <td>
-                      <span className="codigo-cliente">
+                      <span className="cliente-id">
                         {cliente.idCliente}
                       </span>
                     </td>
 
-                    {/* EMPRESA */}
                     <td>
-                      <strong>{cliente.nombre}</strong>
-
-                      <small>
-                        {cliente.atencionA ||
-                          "Sin contacto asignado"}
-                      </small>
+                      <input
+                        value={cliente.empresa}
+                        placeholder="Empresa"
+                        onChange={(e) =>
+                          actualizarCampo(
+                            cliente.idCliente,
+                            "empresa",
+                            e.target.value
+                          )
+                        }
+                      />
                     </td>
 
-                    {/* CONTACTO */}
                     <td>
-                      <div className="dato-contacto">
-                        <Mail size={14} />
-                        {cliente.correo}
-                      </div>
-
-                      <div className="dato-contacto">
-                        <Phone size={14} />
-                        {cliente.telefono}
-                      </div>
+                      <input
+                        value={cliente.direccion}
+                        placeholder="Dirección"
+                        onChange={(e) =>
+                          actualizarCampo(
+                            cliente.idCliente,
+                            "direccion",
+                            e.target.value
+                          )
+                        }
+                      />
                     </td>
 
-                    {/* UBICACIÓN */}
                     <td>
-                      <div className="dato-contacto">
-                        <MapPin size={14} />
-                        {cliente.direccion}
-                      </div>
-
-                      <small>
-                        {cliente.subdireccion}
-                      </small>
+                      <input
+                        value={cliente.telefono}
+                        placeholder="00000000"
+                        maxLength={8}
+                        inputMode="numeric"
+                        onChange={(e) =>
+                          actualizarCampo(
+                            cliente.idCliente,
+                            "telefono",
+                            e.target.value.replace(/\D/g, "").slice(0, 8)
+                          )
+                        }
+                      />
                     </td>
 
-                    {/* ACCIONES */}
                     <td>
-                      <div className="acciones-cliente">
+                      <input
+                        type="email"
+                        value={cliente.email}
+                        placeholder="correo@empresa.com"
+                        onChange={(e) =>
+                          actualizarCampo(
+                            cliente.idCliente,
+                            "email",
+                            e.target.value
+                          )
+                        }
+                      />
+                    </td>
+
+                    <td>
+                      <div className="celda-atencion">
+
+                        <input
+                          value={cliente.atencionA}
+                          placeholder="Persona de contacto"
+                          onChange={(e) =>
+                            actualizarCampo(
+                              cliente.idCliente,
+                              "atencionA",
+                              e.target.value
+                            )
+                          }
+                        />
 
                         <button
-                          className="btn-accion editar"
-                          title="Editar cliente"
-                          onClick={() =>
-                            abrirEditarCliente(cliente)
-                          }
+                          type="button"
+                          className="btn-tabla-guardar"
+                          onClick={() => guardarCliente(cliente)}
+                          disabled={guardando === cliente.idCliente}
+                          title="Guardar cambios"
                         >
-                          <Pencil size={17} />
+                          <Save size={17} />
                         </button>
 
                         <button
-                          className="btn-accion eliminar"
+                          type="button"
+                          className="btn-tabla-eliminar"
+                          onClick={() => eliminarCliente(cliente)}
                           title="Eliminar cliente"
-                          onClick={() =>
-                            eliminarCliente(cliente)
-                          }
                         >
                           <Trash2 size={17} />
                         </button>
@@ -475,259 +757,25 @@ function Clientes() {
                     </td>
 
                   </tr>
-                ))}
-              </tbody>
 
-            </table>
-          </div>
-        )}
+                ))
+              )}
+
+            </tbody>
+
+          </table>
+
+        </div>
 
         {/* PIE DE TABLA */}
-        <div className="clientes-panel-footer">
-          Mostrando {clientesFiltrados.length} de{" "}
-          {clientes.length} clientes
+
+        <div className="clientes-tabla-footer">
+          <span>
+            Los campos son opcionales. Guardá cada fila después de editarla.
+          </span>
         </div>
 
       </div>
-
-      {/* ======================================
-          MODAL DE REGISTRO Y EDICIÓN
-      ====================================== */}
-
-      {modalAbierto && (
-        <div
-          className="modal-overlay"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              cerrarModal();
-            }
-          }}
-        >
-
-          <div
-            className="modal-cliente"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="titulo-modal-cliente"
-          >
-
-            {/* ENCABEZADO DEL MODAL */}
-            <div className="modal-header">
-              <div>
-                <h2 id="titulo-modal-cliente">
-                  {clienteEditar
-                    ? "Editar cliente"
-                    : "Registrar cliente"}
-                </h2>
-
-                <p>
-                  {clienteEditar
-                    ? `Código: ${clienteEditar.idCliente}`
-                    : "Completa la información del nuevo cliente."}
-                </p>
-              </div>
-
-              <button
-                className="modal-cerrar"
-                onClick={cerrarModal}
-                disabled={guardando}
-                type="button"
-              >
-                <X size={21} />
-              </button>
-            </div>
-
-            {/* FORMULARIO */}
-            <form onSubmit={guardarCliente}>
-
-              <div className="formulario-clientes">
-
-                {/* NOMBRE */}
-                <div className="campo campo-completo">
-                  <label htmlFor="nombre">
-                    Nombre o empresa *
-                  </label>
-
-                  <input
-                    id="nombre"
-                    name="nombre"
-                    value={formulario.nombre}
-                    onChange={cambiarCampo}
-                    placeholder="Ej. Empresa de Prueba S.A. de C.V."
-                    required
-                  />
-                </div>
-
-                {/* DEPARTAMENTO */}
-                <div className="campo">
-                  <label htmlFor="direccion">
-                    Departamento *
-                  </label>
-
-                  <select
-                    id="direccion"
-                    name="direccion"
-                    value={formulario.direccion}
-                    onChange={cambiarCampo}
-                    required
-                  >
-                    <option value="">
-                      Seleccionar departamento
-                    </option>
-
-                    {departamentos.map((departamento) => (
-                      <option
-                        key={departamento}
-                        value={departamento}
-                      >
-                        {departamento}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* SUBDIRECCIÓN */}
-                <div className="campo">
-                  <label htmlFor="subdireccion">
-                    Subdirección
-                  </label>
-
-                  <input
-                    id="subdireccion"
-                    name="subdireccion"
-                    value={formulario.subdireccion}
-                    onChange={cambiarCampo}
-                    placeholder="Municipio, colonia, dirección..."
-                  />
-                </div>
-
-                {/* REGISTRO FISCAL */}
-                <div className="campo">
-                  <label htmlFor="registroFiscal">
-                    Registro fiscal
-                  </label>
-
-                  <input
-                    id="registroFiscal"
-                    name="registroFiscal"
-                    value={formulario.registroFiscal}
-                    onChange={cambiarCampo}
-                    placeholder="Registro fiscal"
-                  />
-                </div>
-
-                {/* NIT */}
-                <div className="campo">
-                  <label htmlFor="nit">
-                    NIT
-                  </label>
-
-                  <input
-                    id="nit"
-                    name="nit"
-                    value={formulario.nit}
-                    onChange={cambiarCampo}
-                    placeholder="Número de NIT"
-                  />
-                </div>
-
-                {/* TELÉFONO */}
-                <div className="campo">
-                  <label htmlFor="telefono">
-                    Teléfono *
-                  </label>
-
-                  <input
-                    id="telefono"
-                    name="telefono"
-                    type="tel"
-                    value={formulario.telefono}
-                    onChange={cambiarCampo}
-                    placeholder="Ej. 2222-2222"
-                    required
-                  />
-                </div>
-
-                {/* CORREO */}
-                <div className="campo">
-                  <label htmlFor="correo">
-                    Correo electrónico *
-                  </label>
-
-                  <input
-                    id="correo"
-                    name="correo"
-                    type="email"
-                    value={formulario.correo}
-                    onChange={cambiarCampo}
-                    placeholder="correo@empresa.com"
-                    required
-                  />
-                </div>
-
-                {/* ATENCIÓN A */}
-                <div className="campo campo-completo">
-                  <label htmlFor="atencionA">
-                    Atención a
-                  </label>
-
-                  <input
-                    id="atencionA"
-                    name="atencionA"
-                    value={formulario.atencionA}
-                    onChange={cambiarCampo}
-                    placeholder="Nombre de la persona de contacto"
-                  />
-                </div>
-
-              </div>
-
-              {/* ERROR DEL FORMULARIO */}
-              {error && (
-                <div className="alerta alerta-error">
-                  {error}
-                </div>
-              )}
-
-              {/* BOTONES */}
-              <div className="modal-acciones">
-
-                <button
-                  type="button"
-                  className="btn-secundario"
-                  onClick={cerrarModal}
-                  disabled={guardando}
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={guardando}
-                >
-                  {guardando ? (
-                    <>
-                      <LoaderCircle
-                        className="spinner"
-                        size={17}
-                      />
-                      Guardando...
-                    </>
-                  ) : (
-                    clienteEditar
-                      ? "Guardar cambios"
-                      : "Registrar cliente"
-                  )}
-                </button>
-
-              </div>
-
-            </form>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

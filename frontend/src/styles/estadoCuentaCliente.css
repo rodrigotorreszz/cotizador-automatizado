@@ -1,10 +1,20 @@
+
+/* ==========================================
+   ESTADO DE CUENTA POR CLIENTE
+========================================== */
+
 .estado-cuenta-page {
   min-height: 100vh;
   padding: 30px;
   background: #f5f7fb;
   color: #071b3d;
   font-family: "Inter", sans-serif;
+  box-sizing: border-box;
 }
+
+/* ==========================================
+   ENCABEZADO
+========================================== */
 
 .estado-cuenta-header {
   display: flex;
@@ -34,8 +44,13 @@
   font-size: 14px;
 }
 
+/* ==========================================
+   BOTONES
+========================================== */
+
 .estado-cuenta-acciones {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -48,6 +63,7 @@
   border: none;
   border-radius: 9px;
   cursor: pointer;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 700;
   transition: 0.2s ease;
@@ -76,6 +92,25 @@
 .btn-imprimir:hover:not(:disabled) {
   background: #0665b3;
 }
+
+/* NUEVO BOTÓN PDF */
+
+.btn-descargar-pdf {
+  background: #0c8b63;
+  color: white;
+}
+
+.btn-descargar-pdf:hover:not(:disabled) {
+  background: #087451;
+}
+
+.btn-descargar-pdf:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ==========================================
+   SELECTOR DE CLIENTES
+========================================== */
 
 .estado-cuenta-selector {
   padding: 22px;
@@ -132,6 +167,7 @@
   color: #071b3d;
   font-family: inherit;
   font-size: 13px;
+  box-sizing: border-box;
 }
 
 .campo-busqueda-cliente input:focus,
@@ -146,6 +182,10 @@
   color: #8492a6;
   font-size: 11px;
 }
+
+/* ==========================================
+   MENSAJES
+========================================== */
 
 .estado-cuenta-mensaje,
 .estado-cuenta-vacio {
@@ -199,6 +239,10 @@
   }
 }
 
+/* ==========================================
+   DOCUMENTO
+========================================== */
+
 .estado-cuenta-documento {
   padding: 30px;
   background: white;
@@ -206,6 +250,10 @@
   border-radius: 13px;
   box-shadow: 0 4px 18px rgba(7, 27, 61, 0.04);
 }
+
+/* ==========================================
+   ENCABEZADO DEL DOCUMENTO
+========================================== */
 
 .documento-encabezado {
   display: flex;
@@ -254,12 +302,20 @@
   font-size: 13px;
 }
 
+/* ==========================================
+   SECCIONES
+========================================== */
+
 .ficha-cliente,
 .resumen-financiero-cliente,
 .detalle-proyectos,
 .cotizaciones-independientes {
   margin-top: 27px;
 }
+
+/* ==========================================
+   INFORMACIÓN DEL CLIENTE
+========================================== */
 
 .ficha-cliente-titulo,
 .resumen-financiero-titulo {
@@ -313,6 +369,10 @@
   overflow-wrap: anywhere;
 }
 
+/* ==========================================
+   RESUMEN FINANCIERO
+========================================== */
+
 .resumen-financiero-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -340,6 +400,7 @@
   color: #071b3d;
   font-size: 21px;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .financiero-card small {
@@ -374,6 +435,10 @@
   color: #0878d1;
 }
 
+/* ==========================================
+   TÍTULOS DE SECCIÓN
+========================================== */
+
 .seccion-titulo {
   display: flex;
   align-items: center;
@@ -400,6 +465,10 @@
   font-size: 11px;
   font-weight: 700;
 }
+
+/* ==========================================
+   TARJETAS DE PROYECTOS
+========================================== */
 
 .proyecto-estado-card {
   margin-bottom: 17px;
@@ -438,6 +507,10 @@
   font-size: 11px;
 }
 
+/* ==========================================
+   ESTADO DEL PROYECTO
+========================================== */
+
 .proyecto-estado-badge {
   padding: 6px 10px;
   border-radius: 20px;
@@ -463,6 +536,10 @@
   color: #b7791f;
 }
 
+/* ==========================================
+   DATOS DEL PROYECTO
+========================================== */
+
 .proyecto-datos-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -477,6 +554,10 @@
 .texto-pendiente {
   color: #b7791f !important;
 }
+
+/* ==========================================
+   HISTORIAL DE PAGOS
+========================================== */
 
 .historial-pagos {
   padding-top: 15px;
@@ -506,6 +587,10 @@
   font-size: 12px;
   text-align: center;
 }
+
+/* ==========================================
+   TABLAS
+========================================== */
 
 .tabla-pagos-wrapper {
   width: 100%;
@@ -538,6 +623,10 @@
   font-weight: 800;
 }
 
+/* ==========================================
+   PIE DEL DOCUMENTO
+========================================== */
+
 .estado-cuenta-footer {
   display: flex;
   align-items: center;
@@ -556,7 +645,9 @@
   text-align: center;
 }
 
-/* RESPONSIVE */
+/* ==========================================
+   RESPONSIVE - TABLETS
+========================================== */
 
 @media (max-width: 900px) {
   .resumen-financiero-grid {
@@ -566,7 +657,15 @@
   .proyecto-datos-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .estado-cuenta-acciones {
+    justify-content: flex-end;
+  }
 }
+
+/* ==========================================
+   RESPONSIVE - MÓVILES
+========================================== */
 
 @media (max-width: 650px) {
   .estado-cuenta-page {
@@ -584,10 +683,11 @@
 
   .estado-cuenta-acciones {
     width: 100%;
+    flex-direction: column;
   }
 
   .btn-estado-cuenta {
-    flex: 1;
+    width: 100%;
   }
 
   .selector-campos {
@@ -622,7 +722,9 @@
   }
 }
 
-/* IMPRESIÓN */
+/* ==========================================
+   IMPRESIÓN
+========================================== */
 
 @media print {
   @page {
@@ -669,5 +771,11 @@
 
   .estado-cuenta-footer {
     break-inside: avoid;
+  }
+
+  .btn-descargar-pdf,
+  .btn-imprimir,
+  .btn-actualizar {
+    display: none !important;
   }
 }

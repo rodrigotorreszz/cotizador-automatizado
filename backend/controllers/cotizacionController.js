@@ -1,19 +1,12 @@
+
 const Cotizacion = require("../models/Cotizacion");
 const Cliente = require("../models/Cliente");
 const Proyecto = require("../models/Proyecto");
 const generateId = require("../utils/generateId");
 
 // ==========================================
-// UTILIDADES
+// CONFIGURACIÓN Y UTILIDADES
 // ==========================================
-
-const redondear = (numero) =>
-  Math.round((Number(numero || 0) + Number.EPSILON) * 100) / 100;
-
-const limpiarCondicion = (valor) => {
-  if (valor === undefined || valor === null) return "";
-  return String(valor).trim();
-};
 
 const estadosPermitidos = [
   "Borrador",
@@ -22,18 +15,45 @@ const estadosPermitidos = [
   "Rechazada",
 ];
 
-// Campos necesarios para el documento PDF.
 const CAMPOS_CLIENTE =
   "idCliente nombre empresa telefono correo direccion subdireccion registroFiscal nit atencionA";
 
 const CAMPOS_PROYECTO =
   "idProyecto proyecto nombre ubicacion estado";
 
+const redondear = (numero) =>
+  Math.round((Number(numero || 0) + Number.EPSILON) * 100) / 100;
+
+const capitalizarPalabras = (texto = "") =>
+  String(texto).replace(
+    /(^|[\s])(\p{L})/gu,
+    (coincidencia, espacio, letra) =>
+      espacio + letra.toLocaleUpperCase("es-SV")
+  );
+
+const limpiarTexto = (valor = "") =>
+  String(valor)
+    .replace(/[^\p{L}\p{N}\s.,&'()/%#-]/gu, "")
+    .trim();
+
+const limpiarCondicion = (valor, maximo) => {
+  if (valor === undefined || valor === null) return "";
+
+  const texto = String(valor).trim();
+
+  if (texto.length > maximo) {
+    throw new Error(`El texto no puede superar ${maximo} caracteres.`);
+  }
+
+  return capitalizarPalabras(texto);
+};
+
+const validarEstado = (estado) =>
+  estadosPermitidos.includes(estado);
+
 const validarFecha = (fecha) => {
   if (!fecha) return null;
 
-  // Las fechas YYYY-MM-DD se interpretan de forma local
-  // para evitar desplazamientos de día por zona horaria.
   if (typeof fecha === "string") {
     const coincidencia = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
@@ -68,30 +88,58 @@ const validarFecha = (fecha) => {
     : fechaValidada;
 };
 
+const esErrorValidacion = (error) =>
+  error.name === "ValidationError" ||
+  error.name === "CastError" ||
+  error.name === "MongoServerError" && error.code === 11000 ||
+  error.code === 11000;
+
 // ==========================================
 // CALCULAR CONCEPTOS
 // ==========================================
 
 const calcularConceptos = (conceptos) => {
   if (!Array.isArray(conceptos) || conceptos.length === 0) {
-    throw new Error("Agregá al menos un concepto a la cotización.");
+    throw new Error("Agrega al menos un concepto a la cotización.");
   }
 
-  return conceptos.map((concepto) => {
-    const descripcion = String(concepto.descripcion || "").trim();
+  if (conceptos.length > 100) {
+    throw new Error("Una cotización no puede tener más de 100 conceptos.");
+  }
+
+  return conceptos.map((concepto, indice) => {
+    const descripcionOriginal = limpiarTexto(
+      concepto.descripcion || ""
+    );
+
+    const descripcion = capitalizarPalabras(descripcionOriginal);
     const cantidad = Number(concepto.cantidad);
     const precioUnitario = Number(concepto.precioUnitario);
 
-    if (!descripcion) {
-      throw new Error("Todos los conceptos deben tener descripción.");
+    if (descripcion.length < 3 || descripcion.length > 200) {
+      throw new Error(
+        `La descripción del concepto ${indice + 1} debe tener entre 3 y 200 caracteres.`
+      );
     }
 
-    if (!Number.isFinite(cantidad) || cantidad <= 0) {
-      throw new Error("Las cantidades deben ser mayores que cero.");
+    if (
+      !Number.isFinite(cantidad) ||
+      cantidad <= 0 ||
+      cantidad > 1000000
+    ) {
+      throw new Error(
+        `La cantidad del concepto ${indice + 1} debe ser mayor que cero.`
+      );
     }
 
-    if (!Number.isFinite(precioUnitario) || precioUnitario < 0) {
-      throw new Error("Los precios no pueden ser negativos.");
+    if (
+      !Number.isFinite(precioUnitario) ||
+      precioUnitario < 0 ||
+      precioUnitario > 100000000
+    ) {
+      throw new Error(
+        `El precio del concepto ${indice + 1} no es válido.`
+      );
     }
 
     return {
@@ -108,6 +156,18 @@ const calcularConceptos = (conceptos) => {
 // ==========================================
 
 const calcularTotales = (conceptos, porcentajeIVA = 13) => {
+  const porcentaje = Number(porcentajeIVA);
+
+  if (
+    !Number.isFinite(porcentaje) ||
+    porcentaje < 0 ||
+    porcentaje > 100
+  ) {
+    throw new Error(
+      "El porcentaje de IVA debe estar entre 0 y 100."
+    );
+  }
+
   const subtotal = redondear(
     conceptos.reduce(
       (acumulado, concepto) => acumulado + concepto.total,
@@ -115,16 +175,7 @@ const calcularTotales = (conceptos, porcentajeIVA = 13) => {
     )
   );
 
-  const porcentaje = Number(porcentajeIVA);
-
-  if (!Number.isFinite(porcentaje) || porcentaje < 0) {
-    throw new Error("El porcentaje de IVA no es válido.");
-  }
-
-  const iva = redondear(
-    subtotal * (porcentaje / 100)
-  );
-
+  const iva = redondear(subtotal * (porcentaje / 100));
   const totalGeneral = redondear(subtotal + iva);
 
   return {
@@ -136,26 +187,54 @@ const calcularTotales = (conceptos, porcentajeIVA = 13) => {
 };
 
 // ==========================================
-// OBTENER CLIENTE
+// BUSCAR CLIENTE POR ID O CÓDIGO
 // ==========================================
 
 const buscarCliente = async (idCliente) => {
   if (!idCliente) return null;
 
+  const identificador = String(idCliente).trim();
+
+  // Primero intenta buscar por ObjectId de MongoDB.
+  if (/^[a-fA-F0-9]{24}$/.test(identificador)) {
+    const clientePorId = await Cliente.findById(identificador);
+
+    if (clientePorId) {
+      return clientePorId;
+    }
+  }
+
+  // Si no es ObjectId o no existe, busca por código.
   return Cliente.findOne({
-    idCliente: String(idCliente).trim().toUpperCase(),
+    idCliente: identificador.toUpperCase(),
   });
 };
 
 // ==========================================
-// OBTENER PROYECTO PERTENECIENTE A CLIENTE
+// BUSCAR PROYECTO POR ID O CÓDIGO
+// VALIDANDO QUE PERTENEZCA AL CLIENTE
 // ==========================================
 
 const buscarProyectoCliente = async (idProyecto, idCliente) => {
   if (!idProyecto || !idCliente) return null;
 
+  const identificador = String(idProyecto).trim();
+
+  // Buscar por ObjectId de MongoDB.
+  if (/^[a-fA-F0-9]{24}$/.test(identificador)) {
+    const proyectoPorId = await Proyecto.findOne({
+      _id: identificador,
+      idCliente,
+    });
+
+    if (proyectoPorId) {
+      return proyectoPorId;
+    }
+  }
+
+  // Buscar por código personalizado del proyecto.
   return Proyecto.findOne({
-    idProyecto: String(idProyecto).trim().toUpperCase(),
+    idProyecto: identificador.toUpperCase(),
     idCliente,
   });
 };
@@ -190,25 +269,16 @@ const actualizarMontoProyecto = async (idProyecto) => {
 };
 
 // ==========================================
-// VALIDAR ESTADO
+// POPULAR DATOS PARA RESPUESTAS
 // ==========================================
 
-const validarEstado = (estado) => {
-  return estadosPermitidos.includes(estado);
-};
-
-// ==========================================
-// POPULATE COMPLETO PARA DOCUMENTOS
-// ==========================================
-
-const popularDatosCotizacion = (consulta) => {
-  return consulta
+const popularDatosCotizacion = (consulta) =>
+  consulta
     .populate("idCliente", CAMPOS_CLIENTE)
     .populate("idProyecto", CAMPOS_PROYECTO);
-};
 
 // ==========================================
-// CREAR COTIZACIÓN
+// CREAR COTIZACIÓN O COPIA
 // ==========================================
 
 const crearCotizacion = async (req, res) => {
@@ -219,26 +289,45 @@ const crearCotizacion = async (req, res) => {
       conceptos,
       porcentajeIVA = 13,
       fecha,
-      estado = "Borrador",
       anticipo = "",
       entrega = "",
       validez = "",
+      cotizacionOrigen,
     } = req.body;
 
     if (!idCliente) {
       return res.status(400).json({
         success: false,
-        message: "Debés seleccionar un cliente.",
+        message: "Debes seleccionar un cliente.",
       });
     }
 
-    if (!validarEstado(estado)) {
-      return res.status(400).json({
-        success: false,
-        message: "El estado de la cotización no es válido.",
+    // Identificar si es una copia.
+    let esCopia = false;
+    let codigoCotizacionOrigen = null;
+
+    if (cotizacionOrigen) {
+      const codigo = String(cotizacionOrigen).trim();
+
+      const cotizacionFuente = await Cotizacion.findOne({
+        idCotizacion: codigo,
       });
+
+      if (!cotizacionFuente) {
+        return res.status(404).json({
+          success: false,
+          message: "No se encontró la cotización que deseas copiar.",
+        });
+      }
+
+      esCopia = true;
+      codigoCotizacionOrigen = cotizacionFuente.idCotizacion;
     }
 
+    // Las copias siempre empiezan como borrador.
+    const estado = "Borrador";
+
+    // Buscar cliente por MongoDB ID o código.
     const cliente = await buscarCliente(idCliente);
 
     if (!cliente) {
@@ -248,6 +337,7 @@ const crearCotizacion = async (req, res) => {
       });
     }
 
+    // Validar proyecto.
     let proyecto = null;
 
     if (idProyecto) {
@@ -264,6 +354,7 @@ const crearCotizacion = async (req, res) => {
       }
     }
 
+    // Validar fecha.
     let fechaValidada;
 
     if (fecha !== undefined) {
@@ -277,6 +368,7 @@ const crearCotizacion = async (req, res) => {
       }
     }
 
+    // Calcular conceptos y totales en el servidor.
     const conceptosCalculados = calcularConceptos(conceptos);
 
     const totales = calcularTotales(
@@ -284,38 +376,53 @@ const crearCotizacion = async (req, res) => {
       porcentajeIVA
     );
 
+    // Crear cotización.
     const nuevaCotizacion = new Cotizacion({
       idCotizacion: await generateId("COT"),
+
+      esCopia,
+      cotizacionOrigen: codigoCotizacionOrigen,
+
       idCliente: cliente._id,
       idProyecto: proyecto ? proyecto._id : null,
+
       conceptos: conceptosCalculados,
-      anticipo: limpiarCondicion(anticipo),
-      entrega: limpiarCondicion(entrega),
-      validez: limpiarCondicion(validez),
+
+      anticipo: limpiarCondicion(anticipo, 500),
+      entrega: limpiarCondicion(entrega, 200),
+      validez: limpiarCondicion(validez, 100),
+
       estado,
       ...totales,
+
       ...(fechaValidada && { fecha: fechaValidada }),
     });
 
     await nuevaCotizacion.save();
 
+    // Actualizar monto contratado si corresponde.
     if (estado === "Aceptada" && proyecto) {
       await actualizarMontoProyecto(proyecto._id);
     }
 
+    // Obtener cotización con cliente y proyecto.
     const cotizacionGuardada = await popularDatosCotizacion(
       Cotizacion.findById(nuevaCotizacion._id)
     );
 
     return res.status(201).json({
       success: true,
-      message: "Cotización creada correctamente.",
+      message: esCopia
+        ? "Copia de cotización creada correctamente."
+        : "Cotización creada correctamente.",
       cotizacion: cotizacionGuardada,
     });
   } catch (error) {
     console.error("Error al crear cotización:", error);
 
-    return res.status(400).json({
+    return res.status(
+      esErrorValidacion(error) ? 400 : 500
+    ).json({
       success: false,
       message:
         error.message || "No fue posible crear la cotización.",
@@ -331,9 +438,7 @@ const obtenerCotizaciones = async (req, res) => {
   try {
     const cotizaciones = await popularDatosCotizacion(
       Cotizacion.find()
-    ).sort({
-      createdAt: -1,
-    });
+    ).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -402,9 +507,7 @@ const obtenerCotizacionesPorCliente = async (req, res) => {
       Cotizacion.find({
         idCliente: cliente._id,
       })
-    ).sort({
-      createdAt: -1,
-    });
+    ).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -431,7 +534,6 @@ const obtenerCotizacionesPorCliente = async (req, res) => {
 const obtenerHistorialCotizaciones = async (req, res) => {
   try {
     const { cliente } = req.query;
-
     const filtro = {};
 
     if (cliente && cliente.trim() !== "") {
@@ -505,6 +607,7 @@ const actualizarCotizacion = async (req, res) => {
     let clienteId = cotizacion.idCliente;
     let proyectoId = cotizacion.idProyecto;
 
+    // Actualizar cliente.
     if (idCliente !== undefined) {
       const cliente = await buscarCliente(idCliente);
 
@@ -518,6 +621,7 @@ const actualizarCotizacion = async (req, res) => {
       clienteId = cliente._id;
     }
 
+    // Actualizar proyecto.
     if (idProyecto !== undefined) {
       if (!idProyecto) {
         proyectoId = null;
@@ -549,11 +653,12 @@ const actualizarCotizacion = async (req, res) => {
       if (!proyectoActual) {
         return res.status(400).json({
           success: false,
-          message: "Seleccioná un proyecto que pertenezca al nuevo cliente.",
+          message: "Selecciona un proyecto que pertenezca al nuevo cliente.",
         });
       }
     }
 
+    // Validar estado.
     const nuevoEstado =
       estado !== undefined ? estado : cotizacion.estado;
 
@@ -564,6 +669,7 @@ const actualizarCotizacion = async (req, res) => {
       });
     }
 
+    // Validar fecha.
     let fechaValidada;
 
     if (fecha !== undefined) {
@@ -577,6 +683,7 @@ const actualizarCotizacion = async (req, res) => {
       }
     }
 
+    // Calcular conceptos.
     const conceptosCalculados =
       conceptos !== undefined
         ? calcularConceptos(conceptos)
@@ -592,6 +699,7 @@ const actualizarCotizacion = async (req, res) => {
       nuevoPorcentaje
     );
 
+    // Aplicar cambios.
     cotizacion.idCliente = clienteId;
     cotizacion.idProyecto = proyectoId;
     cotizacion.conceptos = conceptosCalculados;
@@ -604,23 +712,25 @@ const actualizarCotizacion = async (req, res) => {
     }
 
     if (anticipo !== undefined) {
-      cotizacion.anticipo = limpiarCondicion(anticipo);
+      cotizacion.anticipo = limpiarCondicion(anticipo, 500);
     }
 
     if (entrega !== undefined) {
-      cotizacion.entrega = limpiarCondicion(entrega);
+      cotizacion.entrega = limpiarCondicion(entrega, 200);
     }
 
     if (validez !== undefined) {
-      cotizacion.validez = limpiarCondicion(validez);
+      cotizacion.validez = limpiarCondicion(validez, 100);
     }
 
+    // Se conserva la identificación de la copia.
     await cotizacion.save();
 
     const proyectoNuevoId = proyectoId
       ? proyectoId.toString()
       : null;
 
+    // Actualizar proyecto anterior si cambió.
     if (
       proyectoAnterior &&
       proyectoAnterior !== proyectoNuevoId
@@ -628,6 +738,7 @@ const actualizarCotizacion = async (req, res) => {
       await actualizarMontoProyecto(proyectoAnterior);
     }
 
+    // Actualizar proyecto actual.
     if (proyectoNuevoId) {
       await actualizarMontoProyecto(proyectoNuevoId);
     }
@@ -644,7 +755,9 @@ const actualizarCotizacion = async (req, res) => {
   } catch (error) {
     console.error("Error al actualizar cotización:", error);
 
-    return res.status(400).json({
+    return res.status(
+      esErrorValidacion(error) ? 400 : 500
+    ).json({
       success: false,
       message:
         error.message || "No fue posible actualizar la cotización.",
@@ -691,7 +804,6 @@ const eliminarCotizacion = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "No fue posible eliminar la cotización.",
-      error: error.message,
     });
   }
 };

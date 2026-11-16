@@ -2,100 +2,127 @@
 const Cliente = require("../models/Cliente");
 const generateId = require("../utils/generateId");
 
+// ==========================================
 // REGISTRAR CLIENTE
+// ==========================================
 const crearCliente = async (req, res) => {
   try {
-    const {
-      nombre,
-      direccion,
-      subdireccion,
-      registroFiscal,
-      nit,
-      telefono,
-      correo,
-      atencionA
-    } = req.body;
+    console.log("DATOS RECIBIDOS:", req.body);
 
+    const campos = [
+      "nombre",
+      "direccion",
+      "subdireccion",
+      "registroFiscal",
+      "nit",
+      "telefono",
+      "correo",
+      "atencionA",
+    ];
+
+    const datos = {};
+
+    campos.forEach((campo) => {
+      datos[campo] = String(req.body[campo] ?? "").trim();
+    });
+
+    datos.correo = datos.correo.toLowerCase();
+
+    // Generar código automático
     const idCliente = await generateId("CLI");
+
+    console.log("ID GENERADO:", idCliente);
 
     const nuevoCliente = new Cliente({
       idCliente,
-      nombre,
-      direccion,
-      subdireccion,
-      registroFiscal,
-      nit,
-      telefono,
-      correo,
-      atencionA
+      ...datos,
     });
 
     await nuevoCliente.save();
 
-    res.status(201).json({
+    console.log("CLIENTE REGISTRADO:", nuevoCliente.idCliente);
+
+    return res.status(201).json({
       success: true,
       message: "Cliente registrado correctamente",
-      cliente: nuevoCliente
+      cliente: nuevoCliente,
     });
 
   } catch (error) {
-    res.status(500).json({
+    console.error("ERROR COMPLETO AL REGISTRAR CLIENTE:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Error al registrar el cliente",
-      error: error.message
+      error: error.message,
+      code: error.code || null,
+      name: error.name,
+      details: error.errors
+        ? Object.values(error.errors).map((e) => e.message)
+        : null,
     });
   }
 };
 
-// LISTAR CLIENTES
+// ==========================================
+// OBTENER TODOS LOS CLIENTES
+// ==========================================
 const obtenerClientes = async (req, res) => {
   try {
     const clientes = await Cliente.find().sort({ createdAt: -1 });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       total: clientes.length,
-      clientes
+      clientes,
     });
 
   } catch (error) {
-    res.status(500).json({
+    console.error("ERROR AL OBTENER CLIENTES:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Error al obtener los clientes",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
+// ==========================================
 // OBTENER UN CLIENTE
+// ==========================================
 const obtenerCliente = async (req, res) => {
   try {
     const cliente = await Cliente.findOne({
-      idCliente: req.params.id
+      idCliente: req.params.id,
     });
 
     if (!cliente) {
       return res.status(404).json({
         success: false,
-        message: "Cliente no encontrado"
+        message: "Cliente no encontrado",
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      cliente
+      cliente,
     });
 
   } catch (error) {
-    res.status(500).json({
+    console.error("ERROR AL OBTENER CLIENTE:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Error al obtener el cliente",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
+// ==========================================
 // ACTUALIZAR CLIENTE
+// ==========================================
 const actualizarCliente = async (req, res) => {
   try {
     const camposPermitidos = [
@@ -106,80 +133,96 @@ const actualizarCliente = async (req, res) => {
       "nit",
       "telefono",
       "correo",
-      "atencionA"
+      "atencionA",
     ];
 
     const datosActualizar = {};
 
     camposPermitidos.forEach((campo) => {
       if (req.body[campo] !== undefined) {
-        datosActualizar[campo] = req.body[campo];
+        datosActualizar[campo] = String(req.body[campo] ?? "").trim();
       }
     });
 
+    if (datosActualizar.correo !== undefined) {
+      datosActualizar.correo = datosActualizar.correo.toLowerCase();
+    }
+
     const cliente = await Cliente.findOneAndUpdate(
       { idCliente: req.params.id },
-      datosActualizar,
+      { $set: datosActualizar },
       {
         new: true,
-        runValidators: true
+        runValidators: true,
       }
     );
 
     if (!cliente) {
       return res.status(404).json({
         success: false,
-        message: "Cliente no encontrado"
+        message: "Cliente no encontrado",
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Cliente actualizado correctamente",
-      cliente
+      cliente,
     });
 
   } catch (error) {
-    res.status(500).json({
+    console.error("ERROR AL ACTUALIZAR CLIENTE:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Error al actualizar el cliente",
-      error: error.message
+      error: error.message,
+      details: error.errors
+        ? Object.values(error.errors).map((e) => e.message)
+        : null,
     });
   }
 };
 
+// ==========================================
 // ELIMINAR CLIENTE
+// ==========================================
 const eliminarCliente = async (req, res) => {
   try {
     const cliente = await Cliente.findOneAndDelete({
-      idCliente: req.params.id
+      idCliente: req.params.id,
     });
 
     if (!cliente) {
       return res.status(404).json({
         success: false,
-        message: "Cliente no encontrado"
+        message: "Cliente no encontrado",
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Cliente eliminado correctamente"
+      message: "Cliente eliminado correctamente",
     });
 
   } catch (error) {
-    res.status(500).json({
+    console.error("ERROR AL ELIMINAR CLIENTE:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Error al eliminar el cliente",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
+// ==========================================
+// EXPORTAR CONTROLADORES
+// ==========================================
 module.exports = {
   crearCliente,
   obtenerClientes,
   obtenerCliente,
   actualizarCliente,
-  eliminarCliente
+  eliminarCliente,
 };

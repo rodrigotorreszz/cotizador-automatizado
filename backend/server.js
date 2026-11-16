@@ -1,4 +1,3 @@
-
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -23,11 +22,13 @@ const app = express();
 
 const PORT = process.env.PORT || 4000;
 
-// Orígenes autorizados
 const origenesPermitidos = [
   "http://localhost:5173",
   "http://localhost:5174",
   "http://127.0.0.1:4173",
+
+  // Aplicación de escritorio Electron
+  "app://localhost",
 ];
 
 // ========================================
@@ -42,16 +43,20 @@ app.use(
         return callback(null, true);
       }
 
-      // Verificar si el origen está autorizado
+      // Verificar origen autorizado
       if (origenesPermitidos.includes(origin)) {
         return callback(null, true);
       }
+
+      console.log("Origen bloqueado por CORS:", origin);
 
       return callback(
         new Error(`Origen no permitido por CORS: ${origin}`)
       );
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 

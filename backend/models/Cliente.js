@@ -6,19 +6,21 @@ const clienteSchema = new mongoose.Schema(
     idCliente: {
       type: String,
       unique: true,
-      required: true
+      required: true,
+      trim: true,
     },
 
     nombre: {
       type: String,
-      required: [true, "El nombre o empresa es obligatorio"],
-      trim: true
+      trim: true,
+      default: "",
     },
 
     direccion: {
       type: String,
-      required: [true, "El departamento es obligatorio"],
+      trim: true,
       enum: [
+        "",
         "Ahuachapán",
         "Santa Ana",
         "Sonsonate",
@@ -32,50 +34,51 @@ const clienteSchema = new mongoose.Schema(
         "Usulután",
         "San Miguel",
         "Morazán",
-        "La Unión"
-      ]
+        "La Unión",
+      ],
+      default: "",
     },
 
     subdireccion: {
       type: String,
       trim: true,
-      default: ""
+      default: "",
     },
 
     registroFiscal: {
       type: String,
       trim: true,
-      default: ""
+      default: "",
     },
 
     nit: {
       type: String,
       trim: true,
-      default: ""
+      default: "",
     },
 
     telefono: {
       type: String,
-      required: [true, "El teléfono es obligatorio"],
-      trim: true
+      trim: true,
+      default: "",
     },
 
     correo: {
       type: String,
-      required: [true, "El correo es obligatorio"],
       trim: true,
-      lowercase: true
+      lowercase: true,
+      default: "",
     },
 
     atencionA: {
       type: String,
       trim: true,
-      default: ""
-    }
+      default: "",
+    },
   },
   {
     timestamps: true,
-    versionKey: false
+    versionKey: false,
   }
 );
 

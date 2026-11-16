@@ -8,25 +8,25 @@ const {
   obtenerProyecto,
   obtenerProyectosPorCliente,
   actualizarProyecto,
-  eliminarProyecto
+  eliminarProyecto,
 } = require("../controllers/proyectoController");
 
-// POST: Registrar proyecto
+// Registrar proyecto
 router.post("/", crearProyecto);
 
-// GET: Listar todos los proyectos
+// Listar todos los proyectos
 router.get("/", obtenerProyectos);
 
-// GET: Listar proyectos de un cliente
+// Listar proyectos de un cliente
 router.get("/cliente/:idCliente", obtenerProyectosPorCliente);
 
-// GET: Consultar un proyecto por ID
+// Consultar proyecto por código
 router.get("/:id", obtenerProyecto);
 
-// PUT: Actualizar proyecto
+// Actualizar proyecto
 router.put("/:id", actualizarProyecto);
 
-// DELETE: Eliminar proyecto
+// Eliminar proyecto
 router.delete("/:id", eliminarProyecto);
 
 module.exports = router;

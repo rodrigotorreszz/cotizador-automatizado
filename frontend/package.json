@@ -1,6 +1,6 @@
 
 {
-  "name": "frontend",
+  "name": "as-aluminio-vidrio",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -10,18 +10,23 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron": "electron .",
-    "electron:build": "npm run build && electron-builder --win portable"
+    "electron": "npm run build && electron .",
+    "electron:dev": "electron .",
+    "electron:build": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "axios": "^1.21.0",
-    "express": "^5.3.0",
+    "framer-motion": "^14.12.0",
     "html2pdf.js": "^0.14.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.70.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-hot-toast": "^2.6.1",
-    "react-router-dom": "^7.18.5"
+    "react-router-dom": "^7.18.5",
+    "sonner": "^2.0.8",
+    "sweetalert2": "^11.26.25"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -38,7 +43,8 @@
   },
   "build": {
     "appId": "com.as.aluminioyvidrio",
-    "productName": "A&S Aluminio y Vidrio",
+    "productName": "AS Aluminio y Vidrio",
+    "artifactName": "AS-Aluminio-y-Vidrio-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -48,13 +54,23 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "asar": true,
     "win": {
       "target": [
         {
-          "target": "portable",
-          "arch": ["x64"]
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
         }
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AS Aluminio y Vidrio"
     }
   }
 }

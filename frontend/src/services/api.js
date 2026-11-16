@@ -1,4 +1,3 @@
-
 import axios from "axios";
 
 const api = axios.create({
@@ -10,5 +9,13 @@ const api = axios.create({
   },
 });
 
-export default api;
+console.log("================================");
+console.log("API CONFIGURADA:", api.defaults.baseURL);
+console.log("================================");
 
+api.interceptors.request.use((config) => {
+  console.log("SOLICITUD:", config.method?.toUpperCase(), config.baseURL, config.url);
+  return config;
+});
+
+export default api;

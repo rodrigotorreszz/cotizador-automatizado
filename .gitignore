@@ -1,0 +1,27 @@
+# DEPENDENCIAS
+**/node_modules/
+
+# VARIABLES DE ENTORNO
+**/.env
+**/.env.*
+
+# BUILDS
+/frontend/dist/
+/frontend/build/
+
+# ELECTRON
+/frontend/release/**
+/frontend/dist-electron/
+/frontend/out/
+
+# EJECUTABLES
+*.exe
+*.msi
+*.asar
+
+# LOGS
+*.log
+
+# SISTEMA
+.DS_Store
+Thumbs.db

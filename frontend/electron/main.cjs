@@ -1,12 +1,70 @@
 
-const { app, BrowserWindow } = require("electron");
-const express = require("express");
+const {
+  app,
+  BrowserWindow,
+  protocol,
+  net,
+} = require("electron");
+
 const path = require("node:path");
+const fs = require("node:fs");
+const { pathToFileURL } = require("node:url");
 
-const PORT = 4173;
+// Registrar el protocolo antes de iniciar Electron.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "app",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true
+    }
+  }
+]);
 
-let servidor;
 let ventana;
+
+const carpetaDist = path.join(__dirname, "..", "dist");
+
+function configurarProtocolo() {
+  protocol.handle("app", async (request) => {
+    try {
+      const url = new URL(request.url);
+      const rutaSolicitada = decodeURIComponent(url.pathname);
+
+      let archivo = path.resolve(
+        carpetaDist,
+        `.${rutaSolicitada}`
+      );
+
+      // Evitar que se acceda a archivos fuera de dist.
+      if (
+        archivo !== carpetaDist &&
+        !archivo.startsWith(carpetaDist + path.sep)
+      ) {
+        return new Response("Acceso denegado", {
+          status: 403
+        });
+      }
+
+      // Si no existe el archivo, cargar index.html.
+      // Esto permite mantener las rutas de React Router.
+      if (!fs.existsSync(archivo) || fs.statSync(archivo).isDirectory()) {
+        archivo = path.join(carpetaDist, "index.html");
+      }
+
+      return net.fetch(pathToFileURL(archivo).toString());
+
+    } catch (error) {
+      console.error("Error cargando archivo:", error);
+
+      return new Response("No se pudo cargar la aplicación", {
+        status: 500
+      });
+    }
+  });
+}
 
 function crearVentana() {
   ventana = new BrowserWindow({
@@ -14,16 +72,27 @@ function crearVentana() {
     height: 900,
     minWidth: 1000,
     minHeight: 650,
-    title: "A&S Aluminio y Vidrio",
+    title: "AS Aluminio y Vidrio",
+    autoHideMenuBar: true,
+    show: false,
+    backgroundColor: "#ffffff",
 
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
-    },
+      sandbox: true
+    }
   });
 
-  ventana.loadURL(`http://127.0.0.1:${PORT}`);
+  ventana.once("ready-to-show", () => {
+    ventana.show();
+  });
+
+  ventana.loadURL("app://localhost/");
+
+  ventana.webContents.on("did-fail-load", (_, code, description) => {
+    console.error("Error cargando aplicación:", code, description);
+  });
 
   ventana.on("closed", () => {
     ventana = null;
@@ -31,45 +100,19 @@ function crearVentana() {
 }
 
 app.whenReady().then(() => {
-  const servidorApp = express();
+  configurarProtocolo();
 
-  // Carpeta generada por Vite
-  const carpetaDist = path.join(__dirname, "..", "dist");
+  crearVentana();
 
-  // Servir archivos estáticos de React
-  servidorApp.use(express.static(carpetaDist));
-
-  // Permitir que React Router maneje las rutas
-  servidorApp.use((req, res) => {
-    res.sendFile(path.join(carpetaDist, "index.html"));
-  });
-
-  servidor = servidorApp.listen(PORT, "127.0.0.1", () => {
-    console.log(`Aplicación disponible en http://127.0.0.1:${PORT}`);
-
-    crearVentana();
-  });
-
-  servidor.on("error", (error) => {
-    console.error("Error iniciando servidor local:", error);
-    app.quit();
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      crearVentana();
+    }
   });
 });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
-  }
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0 && servidor) {
-    crearVentana();
-  }
-});
-
-app.on("before-quit", () => {
-  if (servidor) {
-    servidor.close();
   }
 });

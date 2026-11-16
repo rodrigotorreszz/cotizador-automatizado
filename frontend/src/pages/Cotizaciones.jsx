@@ -1,5 +1,7 @@
 
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import {
   Plus,
   Search,
@@ -15,18 +17,92 @@ import {
   CalendarDays,
   ChevronDown,
   FileDown,
+  Copy,
 } from "lucide-react";
 
+import Swal from "sweetalert2";
+import "sweetalert2/dist/sweetalert2.min.css";
 import html2pdf from "html2pdf.js";
+
 import api from "../services/api";
-import notificaciones from "../utils/notificaciones";
 import "../styles/cotizaciones.css";
+
+// ==========================================
+// CONSTANTES
+// ==========================================
+
+const ESTADOS = ["Borrador", "Enviada", "Aceptada", "Rechazada"];
+
+const FORMA_PAGO =
+  "70% ANTICIPO - 20% SEGUNDA ESTIMACIÓN - 10% AL FINALIZAR";
 
 const conceptoVacio = () => ({
   descripcion: "",
-  cantidad: 1,
-  precioUnitario: 0,
+  ancho: "0",
+  alto: "0",
+  cantidad: "1",
+  precioUnitario: "0",
 });
+
+// ==========================================
+// FECHAS
+// ==========================================
+
+function fechaActual() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/El_Salvador",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+// ==========================================
+// FORMULARIO INICIAL
+// ==========================================
+
+const formularioInicial = () => ({
+  idCliente: "",
+  idProyecto: "",
+  fecha: fechaActual(),
+  porcentajeIVA: "13",
+  estado: "Borrador",
+  anticipo: FORMA_PAGO,
+  entrega: "",
+  validez: "15 días",
+  conceptos: [conceptoVacio()],
+});
+
+// ==========================================
+// FORMATO DE TEXTO
+// ==========================================
+
+const capitalizarPalabras = (texto = "") =>
+  String(texto).replace(
+    /(^|[\s])(\p{L})/gu,
+    (coincidencia, espacio, letra) =>
+      espacio + letra.toLocaleUpperCase("es-SV")
+  );
+
+const limpiarTexto = (texto = "") =>
+  String(texto).replace(/[^\p{L}\p{N}\s.,&'()/%#-]/gu, "");
+
+// ==========================================
+// LIMPIAR NOMBRE DEL ARCHIVO PDF
+// ==========================================
+
+const limpiarNombreArchivo = (texto = "") =>
+  String(texto)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9-_ ]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
+// ==========================================
+// FORMATO DE DATOS
+// ==========================================
 
 const formatoDinero = (cantidad) =>
   new Intl.NumberFormat("en-US", {
@@ -34,19 +110,81 @@ const formatoDinero = (cantidad) =>
     currency: "USD",
   }).format(Number(cantidad) || 0);
 
-const fechaActual = () => new Date().toISOString().split("T")[0];
+const formatoMedida = (valor) =>
+  Number(valor || 0).toFixed(4);
+
+// ==========================================
+// ALERTAS
+// ==========================================
+
+const alerta = (icon, title, text) =>
+  Swal.fire({
+    icon,
+    title,
+    text,
+    confirmButtonText: "Aceptar",
+    confirmButtonColor: "#0C133F",
+    customClass: {
+      popup: "cotizacion-swal-popup",
+      confirmButton: "cotizacion-swal-confirmar",
+    },
+  });
+
+const mostrarCarga = (titulo) => {
+  Swal.fire({
+    title: titulo,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showConfirmButton: false,
+    customClass: {
+      popup: "cotizacion-swal-popup",
+    },
+    didOpen: () => Swal.showLoading(),
+  });
+};
+
+// ==========================================
+// ESPERAR CARGA DE IMÁGENES
+// ==========================================
+
+const esperarImagen = async (imagen) => {
+  if (!imagen) return;
+
+  if (!imagen.complete) {
+    await new Promise((resolve, reject) => {
+      imagen.onload = resolve;
+      imagen.onerror = () =>
+        reject(new Error("No se pudo cargar el logo de A&S."));
+    });
+  }
+
+  if (!imagen.naturalWidth || !imagen.naturalHeight) {
+    throw new Error("El logo de A&S no se pudo cargar correctamente.");
+  }
+
+  if (imagen.decode) {
+    await imagen.decode();
+  }
+};
+
+// ==========================================
+// COMPONENTE PRINCIPAL
+// ==========================================
 
 function Cotizaciones() {
+  const navigate = useNavigate();
+
   const [cotizaciones, setCotizaciones] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [proyectos, setProyectos] = useState([]);
 
   const [cargando, setCargando] = useState(true);
   const [generandoPDF, setGenerandoPDF] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   const [modalAbierto, setModalAbierto] = useState(false);
   const [cotizacionEditando, setCotizacionEditando] = useState(null);
-  const [cotizacionEliminar, setCotizacionEliminar] = useState(null);
+  const [cotizacionCopiando, setCotizacionCopiando] = useState(null);
   const [cotizacionDocumento, setCotizacionDocumento] = useState(null);
   const [busqueda, setBusqueda] = useState("");
 
@@ -61,42 +199,37 @@ function Cotizaciones() {
     total: true,
   });
 
-  const [formulario, setFormulario] = useState({
-    idCliente: "",
-    idProyecto: "",
-    fecha: fechaActual(),
-    porcentajeIVA: 13,
-    estado: "Borrador",
-    anticipo: "",
-    entrega: "",
-    validez: "15 días",
-    conceptos: [conceptoVacio()],
-  });
+  const [formulario, setFormulario] = useState(formularioInicial);
 
-  const cargarDatos = async () => {
+  // ==========================================
+  // CARGAR INFORMACIÓN
+  // ==========================================
+
+  const cargarDatos = async (mostrarError = true) => {
     try {
       setCargando(true);
 
-      const [
-        respuestaCotizaciones,
-        respuestaClientes,
-        respuestaProyectos,
-      ] = await Promise.all([
-        api.get("/cotizaciones"),
-        api.get("/clientes"),
-        api.get("/proyectos"),
-      ]);
+      const [resCotizaciones, resClientes, resProyectos] =
+        await Promise.all([
+          api.get("/cotizaciones"),
+          api.get("/clientes"),
+          api.get("/proyectos"),
+        ]);
 
-      setCotizaciones(respuestaCotizaciones.data.cotizaciones || []);
-      setClientes(respuestaClientes.data.clientes || []);
-      setProyectos(respuestaProyectos.data.proyectos || []);
+      setCotizaciones(resCotizaciones.data.cotizaciones || []);
+      setClientes(resClientes.data.clientes || []);
+      setProyectos(resProyectos.data.proyectos || []);
     } catch (error) {
       console.error("Error al cargar cotizaciones:", error);
 
-      notificaciones.error(
-        error.response?.data?.message ||
-          "No se pudieron cargar los datos de cotizaciones."
-      );
+      if (mostrarError) {
+        alerta(
+          "error",
+          "Error al cargar",
+          error.response?.data?.message ||
+            "No se pudieron cargar los datos de cotizaciones."
+        );
+      }
     } finally {
       setCargando(false);
     }
@@ -106,94 +239,212 @@ function Cotizaciones() {
     cargarDatos();
   }, []);
 
+  // ==========================================
+  // PROYECTOS DEL CLIENTE
+  // ==========================================
+
   const proyectosDelCliente = useMemo(() => {
     if (!formulario.idCliente) return [];
 
+    const clienteSeleccionado = clientes.find(
+      (cliente) =>
+        String(cliente.idCliente).toUpperCase() ===
+        String(formulario.idCliente).toUpperCase()
+    );
+
+    if (!clienteSeleccionado) return [];
+
     return proyectos.filter((proyecto) => {
-      const clienteProyecto =
-        proyecto.idCliente?.idCliente || proyecto.idCliente;
+      const relacionCliente = proyecto.idCliente;
 
-      return clienteProyecto === formulario.idCliente;
+      const idMongoCliente =
+        relacionCliente && typeof relacionCliente === "object"
+          ? relacionCliente._id
+          : relacionCliente;
+
+      const codigoCliente =
+        relacionCliente && typeof relacionCliente === "object"
+          ? relacionCliente.idCliente
+          : null;
+
+      return (
+        String(idMongoCliente || "") ===
+          String(clienteSeleccionado._id) ||
+        String(codigoCliente || "").toUpperCase() ===
+          String(clienteSeleccionado.idCliente || "").toUpperCase()
+      );
     });
-  }, [proyectos, formulario.idCliente]);
+  }, [proyectos, clientes, formulario.idCliente]);
 
-  const subtotal = useMemo(() => {
-    return formulario.conceptos.reduce((acumulado, concepto) => {
-      const cantidad = Number(concepto.cantidad) || 0;
-      const precio = Number(concepto.precioUnitario) || 0;
+  // ==========================================
+  // CÁLCULOS
+  // ==========================================
 
-      return acumulado + cantidad * precio;
-    }, 0);
-  }, [formulario.conceptos]);
+  const subtotal = useMemo(
+    () =>
+      formulario.conceptos.reduce((acumulado, concepto) => {
+        return (
+          acumulado +
+          (Number(concepto.cantidad) || 0) *
+            (Number(concepto.precioUnitario) || 0)
+        );
+      }, 0),
+    [formulario.conceptos]
+  );
+
+  const porcentajeIVA = Number(formulario.porcentajeIVA);
 
   const iva =
-    (subtotal * (Number(formulario.porcentajeIVA) || 0)) / 100;
+    (subtotal *
+      (Number.isFinite(porcentajeIVA) ? porcentajeIVA : 0)) /
+    100;
 
   const totalGeneral = subtotal + iva;
 
+  // ==========================================
+  // BÚSQUEDA
+  // ==========================================
+
   const cotizacionesFiltradas = cotizaciones.filter((cotizacion) => {
-    const texto = busqueda.toLowerCase();
+    const texto = busqueda.toLocaleLowerCase("es-SV");
 
     const codigo = cotizacion.idCotizacion?.toLowerCase() || "";
-    const nombreCliente = cotizacion.idCliente?.nombre?.toLowerCase() || "";
-    const nombreProyecto =
-      cotizacion.idProyecto?.proyecto?.toLowerCase() || "";
+    const cliente = cotizacion.idCliente?.nombre?.toLowerCase() || "";
+    const proyecto = cotizacion.idProyecto?.proyecto?.toLowerCase() || "";
+    const origen =
+      cotizacion.cotizacionOrigen?.toString().toLowerCase() || "";
 
     return (
       codigo.includes(texto) ||
-      nombreCliente.includes(texto) ||
-      nombreProyecto.includes(texto)
+      cliente.includes(texto) ||
+      proyecto.includes(texto) ||
+      origen.includes(texto)
     );
   });
 
-  // NUEVA COTIZACIÓN
+  // ==========================================
+  // CREAR COTIZACIÓN
+  // ==========================================
+
   const abrirNuevaCotizacion = () => {
     setCotizacionEditando(null);
-
-    setFormulario({
-      idCliente: "",
-      idProyecto: "",
-      fecha: fechaActual(),
-      porcentajeIVA: 13,
-      estado: "Borrador",
-      anticipo: "",
-      entrega: "",
-      validez: "15 días",
-      conceptos: [conceptoVacio()],
-    });
-
+    setCotizacionCopiando(null);
+    setFormulario(formularioInicial());
     setModalAbierto(true);
   };
 
+  // ==========================================
   // EDITAR COTIZACIÓN
+  // ==========================================
+
   const abrirEdicion = (cotizacion) => {
     setCotizacionEditando(cotizacion);
+    setCotizacionCopiando(null);
 
     setFormulario({
-      idCliente: cotizacion.idCliente?.idCliente || "",
-      idProyecto: cotizacion.idProyecto?.idProyecto || "",
+      idCliente:
+        cotizacion.idCliente?.idCliente ||
+        cotizacion.idCliente?._id ||
+        cotizacion.idCliente ||
+        "",
+
+      idProyecto:
+        cotizacion.idProyecto?.idProyecto ||
+        cotizacion.idProyecto?._id ||
+        cotizacion.idProyecto ||
+        "",
+
       fecha: cotizacion.fecha
-        ? new Date(cotizacion.fecha).toISOString().split("T")[0]
+        ? (() => {
+            const fecha = new Date(cotizacion.fecha);
+
+            return new Intl.DateTimeFormat("en-CA", {
+              timeZone: "America/El_Salvador",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            }).format(fecha);
+          })()
         : fechaActual(),
-      porcentajeIVA: cotizacion.porcentajeIVA ?? 13,
+
+      porcentajeIVA: String(cotizacion.porcentajeIVA ?? 13),
       estado: cotizacion.estado || "Borrador",
 
-      // CONDICIONES INDIVIDUALES
-      anticipo: cotizacion.anticipo || "",
+      // La forma de pago siempre será fija
+      anticipo: FORMA_PAGO,
+
       entrega: cotizacion.entrega || "",
       validez: cotizacion.validez || "15 días",
 
-      conceptos: cotizacion.conceptos?.length
-        ? cotizacion.conceptos.map((concepto) => ({
-            descripcion: concepto.descripcion || "",
-            cantidad: concepto.cantidad ?? 1,
-            precioUnitario: concepto.precioUnitario ?? 0,
-          }))
-        : [conceptoVacio()],
+      conceptos:
+        Array.isArray(cotizacion.conceptos) &&
+        cotizacion.conceptos.length > 0
+          ? cotizacion.conceptos.map((concepto) => ({
+              descripcion: concepto.descripcion || "",
+              ancho: String(concepto.ancho ?? 0),
+              alto: String(concepto.alto ?? 0),
+              cantidad: String(concepto.cantidad ?? 1),
+              precioUnitario: String(concepto.precioUnitario ?? 0),
+            }))
+          : [conceptoVacio()],
     });
 
     setModalAbierto(true);
   };
+
+  // ==========================================
+  // COPIAR COTIZACIÓN
+  // ==========================================
+
+  const abrirCopia = (cotizacion) => {
+    setCotizacionEditando(null);
+    setCotizacionCopiando(cotizacion);
+
+    const idCliente =
+      cotizacion.idCliente?.idCliente ||
+      cotizacion.idCliente?._id ||
+      cotizacion.idCliente ||
+      "";
+
+    const idProyecto =
+      cotizacion.idProyecto?.idProyecto ||
+      cotizacion.idProyecto?._id ||
+      cotizacion.idProyecto ||
+      "";
+
+    const conceptos =
+      Array.isArray(cotizacion.conceptos) &&
+      cotizacion.conceptos.length > 0
+        ? cotizacion.conceptos.map((concepto) => ({
+            descripcion: concepto.descripcion || "",
+            ancho: String(concepto.ancho ?? 0),
+            alto: String(concepto.alto ?? 0),
+            cantidad: String(concepto.cantidad ?? 1),
+            precioUnitario: String(concepto.precioUnitario ?? 0),
+          }))
+        : [conceptoVacio()];
+
+    setFormulario({
+      idCliente,
+      idProyecto,
+      fecha: fechaActual(),
+      porcentajeIVA: String(cotizacion.porcentajeIVA ?? 13),
+      estado: "Borrador",
+
+      // La copia también utiliza la forma de pago fija
+      anticipo: FORMA_PAGO,
+
+      entrega: cotizacion.entrega || "",
+      validez: cotizacion.validez || "15 días",
+      conceptos,
+    });
+
+    setModalAbierto(true);
+  };
+
+  // ==========================================
+  // ACTUALIZAR FORMULARIO
+  // ==========================================
 
   const actualizarCampo = (campo, valor) => {
     setFormulario((anterior) => ({
@@ -220,9 +471,11 @@ function Cotizaciones() {
     }));
   };
 
-  const eliminarConcepto = (indice) => {
+  const eliminarConcepto = async (indice) => {
     if (formulario.conceptos.length === 1) {
-      notificaciones.informacion(
+      await alerta(
+        "warning",
+        "Concepto obligatorio",
         "La cotización debe tener al menos un concepto."
       );
       return;
@@ -236,99 +489,346 @@ function Cotizaciones() {
     }));
   };
 
-  // GUARDAR COTIZACIÓN
+  // ==========================================
+  // VALIDACIONES
+  // ==========================================
+
+  const validarFormulario = () => {
+    if (formulario.idCliente) {
+      const clienteExiste = clientes.some(
+        (cliente) =>
+          String(cliente.idCliente) === String(formulario.idCliente)
+      );
+
+      if (!clienteExiste) {
+        alerta(
+          "warning",
+          "Cliente no válido",
+          "El cliente seleccionado ya no está disponible. Actualiza la lista."
+        );
+        return false;
+      }
+    }
+
+    if (formulario.idProyecto) {
+      if (!formulario.idCliente) {
+        alerta(
+          "warning",
+          "Selecciona un cliente",
+          "Para asociar un proyecto primero debes seleccionar su cliente."
+        );
+        return false;
+      }
+
+      const proyectoValido = proyectosDelCliente.some(
+        (proyecto) =>
+          String(proyecto.idProyecto) === String(formulario.idProyecto)
+      );
+
+      if (!proyectoValido) {
+        alerta(
+          "warning",
+          "Proyecto no válido",
+          "El proyecto debe pertenecer al cliente seleccionado."
+        );
+        return false;
+      }
+    }
+
+    if (
+      !formulario.fecha ||
+      Number.isNaN(
+        new Date(`${formulario.fecha}T12:00:00`).getTime()
+      )
+    ) {
+      alerta(
+        "warning",
+        "Fecha no válida",
+        "Selecciona una fecha válida."
+      );
+      return false;
+    }
+
+    if (!ESTADOS.includes(formulario.estado)) {
+      alerta(
+        "warning",
+        "Estado no válido",
+        "Selecciona un estado permitido."
+      );
+      return false;
+    }
+
+    const ivaIngresado = Number(formulario.porcentajeIVA);
+
+    if (
+      formulario.porcentajeIVA === "" ||
+      !Number.isFinite(ivaIngresado) ||
+      ivaIngresado < 0 ||
+      ivaIngresado > 100
+    ) {
+      alerta(
+        "warning",
+        "IVA no válido",
+        "El porcentaje de IVA debe estar entre 0 y 100."
+      );
+      return false;
+    }
+
+    if (
+      !Array.isArray(formulario.conceptos) ||
+      formulario.conceptos.length === 0
+    ) {
+      alerta(
+        "warning",
+        "Conceptos obligatorios",
+        "Agrega al menos un concepto a la cotización."
+      );
+      return false;
+    }
+
+    for (let i = 0; i < formulario.conceptos.length; i += 1) {
+      const concepto = formulario.conceptos[i];
+      const descripcion = concepto.descripcion.trim();
+      const cantidad = Number(concepto.cantidad);
+      const precio = Number(concepto.precioUnitario);
+      const ancho = Number(concepto.ancho);
+      const alto = Number(concepto.alto);
+
+      if (descripcion.length < 3 || descripcion.length > 200) {
+        alerta(
+          "warning",
+          `Descripción del concepto ${i + 1}`,
+          "La descripción debe tener entre 3 y 200 caracteres."
+        );
+        return false;
+      }
+
+      if (
+        !Number.isFinite(ancho) ||
+        ancho < 0 ||
+        ancho > 1000000 ||
+        !/^\d+(\.\d{1,4})?$/.test(String(concepto.ancho))
+      ) {
+        alerta(
+          "warning",
+          `Ancho del concepto ${i + 1}`,
+          "El ancho debe ser un número válido con máximo 4 decimales."
+        );
+        return false;
+      }
+
+      if (
+        !Number.isFinite(alto) ||
+        alto < 0 ||
+        alto > 1000000 ||
+        !/^\d+(\.\d{1,4})?$/.test(String(concepto.alto))
+      ) {
+        alerta(
+          "warning",
+          `Alto del concepto ${i + 1}`,
+          "El alto debe ser un número válido con máximo 4 decimales."
+        );
+        return false;
+      }
+
+      if (
+        !Number.isFinite(cantidad) ||
+        cantidad <= 0 ||
+        cantidad > 1000000
+      ) {
+        alerta(
+          "warning",
+          `Cantidad del concepto ${i + 1}`,
+          "La cantidad debe ser mayor que cero y no exceder 1,000,000."
+        );
+        return false;
+      }
+
+      if (
+        !Number.isFinite(precio) ||
+        precio < 0 ||
+        precio > 100000000
+      ) {
+        alerta(
+          "warning",
+          `Precio del concepto ${i + 1}`,
+          "El precio debe ser un número igual o mayor que cero."
+        );
+        return false;
+      }
+    }
+
+    if (formulario.entrega.length > 200) {
+      alerta(
+        "warning",
+        "Entrega demasiado larga",
+        "El tiempo de entrega admite hasta 200 caracteres."
+      );
+      return false;
+    }
+
+    if (formulario.validez.length > 100) {
+      alerta(
+        "warning",
+        "Validez demasiado larga",
+        "La validez admite hasta 100 caracteres."
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  // ==========================================
+  // GUARDAR / ACTUALIZAR / COPIAR
+  // ==========================================
+
   const guardarCotizacion = async (evento) => {
     evento.preventDefault();
 
-    if (!formulario.idCliente) {
-      notificaciones.error("Selecciona un cliente.");
-      return;
-    }
+    if (guardando || !validarFormulario()) return;
 
-    const conceptosValidos = formulario.conceptos.every(
-      (concepto) =>
-        concepto.descripcion.trim() &&
-        Number(concepto.cantidad) > 0 &&
-        Number(concepto.precioUnitario) >= 0
-    );
-
-    if (!conceptosValidos) {
-      notificaciones.error(
-        "Completa la descripción, cantidad y precio de cada concepto."
-      );
-      return;
-    }
+    const esEdicion = Boolean(cotizacionEditando);
+    const esCopia = Boolean(cotizacionCopiando);
 
     const datos = {
-      idCliente: formulario.idCliente,
+      idCliente: formulario.idCliente || null,
       idProyecto: formulario.idProyecto || null,
       fecha: formulario.fecha,
       porcentajeIVA: Number(formulario.porcentajeIVA),
       estado: formulario.estado,
 
-      // CONDICIONES DE ESTA COTIZACIÓN
-      anticipo: formulario.anticipo.trim(),
-      entrega: formulario.entrega.trim(),
-      validez: formulario.validez.trim(),
+      // Se guarda siempre la misma forma de pago
+      anticipo: FORMA_PAGO,
+
+      entrega: capitalizarPalabras(formulario.entrega.trim()),
+      validez: capitalizarPalabras(formulario.validez.trim()),
+
+      cotizacionOrigen: esCopia
+        ? cotizacionCopiando.idCotizacion
+        : esEdicion
+          ? cotizacionEditando.cotizacionOrigen || null
+          : null,
 
       conceptos: formulario.conceptos.map((concepto) => ({
-        descripcion: concepto.descripcion.trim(),
+        descripcion: capitalizarPalabras(
+          limpiarTexto(concepto.descripcion).trim()
+        ),
+        ancho: Number(concepto.ancho),
+        alto: Number(concepto.alto),
         cantidad: Number(concepto.cantidad),
         precioUnitario: Number(concepto.precioUnitario),
       })),
     };
 
     try {
-      if (cotizacionEditando) {
+      setGuardando(true);
+
+      mostrarCarga(
+        esEdicion
+          ? "Actualizando cotización..."
+          : esCopia
+            ? "Creando copia de cotización..."
+            : "Guardando cotización..."
+      );
+
+      if (esEdicion) {
         await api.put(
           `/cotizaciones/${cotizacionEditando.idCotizacion}`,
           datos
         );
-
-        notificaciones.exito("Cotización actualizada correctamente.");
       } else {
         await api.post("/cotizaciones", datos);
-
-        notificaciones.exito("Cotización creada correctamente.");
       }
+
+      Swal.close();
 
       setModalAbierto(false);
       setCotizacionEditando(null);
+      setCotizacionCopiando(null);
 
-      await cargarDatos();
+      await cargarDatos(false);
+
+      await alerta(
+        "success",
+        "¡Operación exitosa!",
+        esEdicion
+          ? "La cotización se actualizó correctamente."
+          : esCopia
+            ? "La copia se creó correctamente y quedó relacionada con su cotización original."
+            : "La cotización se creó correctamente."
+      );
     } catch (error) {
+      Swal.close();
+
       console.error("Error al guardar cotización:", error);
 
-      notificaciones.error(
+      alerta(
+        "error",
+        "No se pudo guardar",
         error.response?.data?.message ||
-          "No se pudo guardar la cotización."
+          "Ocurrió un error al guardar la cotización."
       );
+    } finally {
+      setGuardando(false);
     }
   };
 
+  // ==========================================
   // ELIMINAR COTIZACIÓN
-  const confirmarEliminacion = async () => {
-    if (!cotizacionEliminar) return;
+  // ==========================================
+
+  const confirmarEliminacion = async (cotizacion) => {
+    const resultado = await Swal.fire({
+      icon: "warning",
+      title: "¿Eliminar cotización?",
+      html: `Se eliminará la cotización <strong>${cotizacion.idCotizacion}</strong>. Esta acción no se puede deshacer.`,
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#DC3545",
+      cancelButtonColor: "#64748B",
+      reverseButtons: true,
+      customClass: {
+        popup: "cotizacion-swal-popup",
+      },
+    });
+
+    if (!resultado.isConfirmed) return;
 
     try {
+      mostrarCarga("Eliminando cotización...");
+
       await api.delete(
-        `/cotizaciones/${cotizacionEliminar.idCotizacion}`
+        `/cotizaciones/${cotizacion.idCotizacion}`
       );
 
-      notificaciones.exito("Cotización eliminada correctamente.");
+      Swal.close();
 
-      setCotizacionEliminar(null);
+      await cargarDatos(false);
 
-      await cargarDatos();
+      await alerta(
+        "success",
+        "Cotización eliminada",
+        "El registro se eliminó correctamente."
+      );
     } catch (error) {
+      Swal.close();
+
       console.error("Error al eliminar cotización:", error);
 
-      notificaciones.error(
+      alerta(
+        "error",
+        "No se pudo eliminar",
         error.response?.data?.message ||
-          "No se pudo eliminar la cotización."
+          "Ocurrió un error al eliminar la cotización."
       );
     }
   };
+
+  // ==========================================
+  // ESTADOS
+  // ==========================================
 
   const obtenerClaseEstado = (estado) => {
     const clases = {
@@ -341,7 +841,10 @@ function Cotizaciones() {
     return clases[estado] || "borrador";
   };
 
-  // DOCUMENTO
+  // ==========================================
+  // DOCUMENTO PDF
+  // ==========================================
+
   const abrirDocumento = (cotizacion) => {
     setOpcionesDocumento({
       cliente: true,
@@ -364,11 +867,18 @@ function Cotizaciones() {
     }));
   };
 
-  // GENERAR PDF
+  // ==========================================
+  // GENERAR Y DESCARGAR PDF
+  // ==========================================
+
   const descargarPDF = async () => {
+    if (!cotizacionDocumento || generandoPDF) return;
+
     if (!Object.values(opcionesDocumento).some(Boolean)) {
-      notificaciones.error(
-        "Selecciona al menos un dato para el documento."
+      await alerta(
+        "warning",
+        "Documento vacío",
+        "Selecciona al menos un dato para incluir en el documento."
       );
       return;
     }
@@ -378,61 +888,147 @@ function Cotizaciones() {
     );
 
     if (!elemento) {
-      notificaciones.error("No se encontró el documento.");
+      await alerta(
+        "error",
+        "Documento no encontrado",
+        "No se encontró la vista del documento."
+      );
       return;
     }
 
     try {
       setGenerandoPDF(true);
 
-      const codigo =
-        cotizacionDocumento?.idCotizacion || "Cotizacion";
+      const imagenes = Array.from(
+        elemento.querySelectorAll("img")
+      );
 
-      const opciones = {
-        margin: [5, 5, 5, 5],
-        filename: `Cotizacion-${codigo}.pdf`,
-        image: {
-          type: "jpeg",
-          quality: 0.98,
-        },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#FFFFFF",
-          logging: false,
-          windowWidth: 1200,
-        },
-        jsPDF: {
-          unit: "mm",
-          format: "a4",
-          orientation: "landscape",
-        },
-        pagebreak: {
-          mode: ["css", "legacy"],
-        },
-      };
+      await Promise.all(
+        imagenes.map((imagen) => esperarImagen(imagen))
+      );
+
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        });
+      });
+
+      const nombreCliente =
+        cotizacionDocumento.idCliente?.nombre || "Sin-Cliente";
+
+      const nombreLimpio = limpiarNombreArchivo(nombreCliente);
+
+      const codigo = limpiarNombreArchivo(
+        cotizacionDocumento.idCotizacion || "Cotizacion"
+      );
+
+      const nombrePDF = `Cotizacion-${nombreLimpio}-${codigo}.pdf`;
+
+      const anchoDocumento = Math.max(
+        elemento.scrollWidth,
+        elemento.offsetWidth
+      );
+
+      const altoDocumento = Math.max(
+        elemento.scrollHeight,
+        elemento.offsetHeight
+      );
 
       await html2pdf()
-        .set(opciones)
+        .set({
+          margin: [7, 7, 7, 7],
+
+          filename: nombrePDF,
+
+          image: {
+            type: "jpeg",
+            quality: 0.98,
+          },
+
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: "#FFFFFF",
+            logging: false,
+            windowWidth: anchoDocumento,
+            windowHeight: altoDocumento,
+            scrollX: 0,
+            scrollY: 0,
+          },
+
+          jsPDF: {
+            unit: "mm",
+            format: "a4",
+            orientation: "landscape",
+          },
+
+          pagebreak: {
+            mode: ["css", "legacy"],
+            before: [".pdf-condiciones-generales"],
+            avoid: [
+              ".pdf-plantilla-encabezado",
+              ".pdf-datos-bloque",
+              ".pdf-condiciones-comerciales",
+              ".pdf-firmas",
+            ],
+          },
+        })
         .from(elemento)
         .save();
 
-      notificaciones.exito("PDF descargado correctamente.");
+      // Cerrar el modal del documento
+      setCotizacionDocumento(null);
+
+      // Confirmación de descarga
+      await alerta(
+        "success",
+        "PDF generado",
+        `Se descargó correctamente: ${nombrePDF}`
+      );
+
+      // Regresar a la página de cotizaciones
+      navigate("/cotizaciones");
     } catch (error) {
       console.error("Error al generar PDF:", error);
 
-      notificaciones.error("No se pudo generar el PDF.");
+      await alerta(
+        "error",
+        "Error al generar PDF",
+        error.message ||
+          "No se pudo generar el documento. Verifica que Imagen 1.png esté dentro de public."
+      );
     } finally {
       setGenerandoPDF(false);
     }
   };
 
+  // ==========================================
+  // FECHA DEL DOCUMENTO
+  // ==========================================
+
   const fechaDocumento = cotizacionDocumento?.fecha
-    ? new Date(cotizacionDocumento.fecha).toLocaleDateString("es-SV")
+    ? new Date(cotizacionDocumento.fecha).toLocaleDateString(
+        "es-SV",
+        {
+          timeZone: "America/El_Salvador",
+        }
+      )
     : "—";
+
+  // ==========================================
+  // RENDERIZADO
+  // ==========================================
 
   return (
     <main className="cotizaciones-page">
+
+      {/* ENCABEZADO */}
+
       <section className="cotizaciones-encabezado">
         <div>
           <span className="cotizaciones-etiqueta">
@@ -447,6 +1043,7 @@ function Cotizaciones() {
         </div>
 
         <button
+          type="button"
           className="cotizacion-btn-principal"
           onClick={abrirNuevaCotizacion}
         >
@@ -454,6 +1051,8 @@ function Cotizaciones() {
           Nueva cotización
         </button>
       </section>
+
+      {/* INDICADORES */}
 
       <section className="cotizaciones-resumen">
         <article className="cotizacion-resumen-card">
@@ -475,7 +1074,11 @@ function Cotizaciones() {
           <div>
             <span>Aceptadas</span>
             <strong>
-              {cotizaciones.filter((c) => c.estado === "Aceptada").length}
+              {
+                cotizaciones.filter(
+                  (c) => c.estado === "Aceptada"
+                ).length
+              }
             </strong>
           </div>
         </article>
@@ -488,17 +1091,25 @@ function Cotizaciones() {
           <div>
             <span>Enviadas</span>
             <strong>
-              {cotizaciones.filter((c) => c.estado === "Enviada").length}
+              {
+                cotizaciones.filter(
+                  (c) => c.estado === "Enviada"
+                ).length
+              }
             </strong>
           </div>
         </article>
       </section>
 
+      {/* LISTADO */}
+
       <section className="cotizaciones-contenido">
         <div className="cotizaciones-tabla-encabezado">
           <div>
             <h2>Listado de cotizaciones</h2>
-            <p>Consulta y administra tus cotizaciones registradas.</p>
+            <p>
+              Consulta y administra tus cotizaciones registradas.
+            </p>
           </div>
 
           <div className="cotizaciones-busqueda">
@@ -521,6 +1132,7 @@ function Cotizaciones() {
         ) : cotizacionesFiltradas.length === 0 ? (
           <div className="cotizaciones-vacio">
             <FileText size={42} />
+
             <h3>No hay cotizaciones</h3>
 
             <p>
@@ -531,6 +1143,7 @@ function Cotizaciones() {
 
             {!busqueda && (
               <button
+                type="button"
                 className="cotizacion-btn-principal"
                 onClick={abrirNuevaCotizacion}
               >
@@ -555,87 +1168,136 @@ function Cotizaciones() {
               </thead>
 
               <tbody>
-                {cotizacionesFiltradas.map((cotizacion) => (
-                  <tr key={cotizacion._id}>
-                    <td>
-                      <strong className="cotizacion-codigo">
-                        {cotizacion.idCotizacion}
-                      </strong>
-                    </td>
+                {cotizacionesFiltradas.map((cotizacion) => {
+                  const esCopia =
+                    Boolean(cotizacion.esCopia) ||
+                    Boolean(cotizacion.cotizacionOrigen);
 
-                    <td>
-                      <div className="cotizacion-cliente-celda">
-                        <UserRound size={17} />
-                        {cotizacion.idCliente?.nombre || "Sin cliente"}
-                      </div>
-                    </td>
+                  return (
+                    <tr key={cotizacion._id}>
+                      <td>
+                        <div className="cotizacion-codigo-contenedor">
+                          <strong className="cotizacion-codigo">
+                            {cotizacion.idCotizacion}
+                          </strong>
 
-                    <td>
-                      {cotizacion.idProyecto?.proyecto || "Sin proyecto"}
-                    </td>
+                          <span
+                            className={`cotizacion-tipo ${
+                              esCopia ? "copia" : "original"
+                            }`}
+                          >
+                            {esCopia ? (
+                              <>
+                                <Copy size={11} />
+                                COPIA
+                              </>
+                            ) : (
+                              "ORIGINAL"
+                            )}
+                          </span>
+                        </div>
 
-                    <td>
-                      {cotizacion.fecha
-                        ? new Date(cotizacion.fecha).toLocaleDateString("es-SV")
-                        : "—"}
-                    </td>
+                        {cotizacion.cotizacionOrigen && (
+                          <small className="cotizacion-origen">
+                            De: {cotizacion.cotizacionOrigen}
+                          </small>
+                        )}
+                      </td>
 
-                    <td>
-                      <span
-                        className={`cotizacion-estado ${obtenerClaseEstado(
-                          cotizacion.estado
-                        )}`}
-                      >
-                        {cotizacion.estado || "Borrador"}
-                      </span>
-                    </td>
+                      <td>
+                        <div className="cotizacion-cliente-celda">
+                          <UserRound size={17} />
+                          {cotizacion.idCliente?.nombre || "Sin cliente"}
+                        </div>
+                      </td>
 
-                    <td className="cotizacion-total-celda">
-                      {formatoDinero(cotizacion.totalGeneral)}
-                    </td>
+                      <td>
+                        {cotizacion.idProyecto?.proyecto || "Sin proyecto"}
+                      </td>
 
-                    <td>
-                      <div className="cotizacion-acciones">
-                        <button
-                          className="cotizacion-accion editar"
-                          title="Editar cotización"
-                          onClick={() => abrirEdicion(cotizacion)}
+                      <td>
+                        {cotizacion.fecha
+                          ? new Date(cotizacion.fecha).toLocaleDateString(
+                              "es-SV",
+                              {
+                                timeZone: "America/El_Salvador",
+                              }
+                            )
+                          : "—"}
+                      </td>
+
+                      <td>
+                        <span
+                          className={`cotizacion-estado ${obtenerClaseEstado(
+                            cotizacion.estado
+                          )}`}
                         >
-                          <Pencil size={17} />
-                        </button>
+                          {cotizacion.estado || "Borrador"}
+                        </span>
+                      </td>
 
-                        <button
-                          className="cotizacion-generar-btn"
-                          title="Generar documento para el cliente"
-                          onClick={() => abrirDocumento(cotizacion)}
-                        >
-                          <FileText size={16} />
-                          Generar
-                        </button>
+                      <td className="cotizacion-total-celda">
+                        {formatoDinero(cotizacion.totalGeneral)}
+                      </td>
 
-                        <button
-                          className="cotizacion-accion eliminar"
-                          title="Eliminar cotización"
-                          onClick={() => setCotizacionEliminar(cotizacion)}
-                        >
-                          <Trash2 size={17} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      <td>
+                        <div className="cotizacion-acciones">
+                          <button
+                            type="button"
+                            className="cotizacion-accion editar"
+                            title="Editar cotización"
+                            onClick={() => abrirEdicion(cotizacion)}
+                          >
+                            <Pencil size={17} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="cotizacion-accion copiar"
+                            title="Crear copia de cotización"
+                            onClick={() => abrirCopia(cotizacion)}
+                          >
+                            <Copy size={17} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="cotizacion-generar-btn"
+                            title="Generar documento para el cliente"
+                            onClick={() => abrirDocumento(cotizacion)}
+                          >
+                            <FileText size={16} />
+                            Generar
+                          </button>
+
+                          <button
+                            type="button"
+                            className="cotizacion-accion eliminar"
+                            title="Eliminar cotización"
+                            onClick={() =>
+                              confirmarEliminacion(cotizacion)
+                            }
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </section>
 
-      {/* MODAL CREAR / EDITAR */}
+      {/* MODAL CREAR / EDITAR / COPIAR */}
+
       {modalAbierto && (
         <div
           className="cotizacion-modal-overlay"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
+            if (e.target === e.currentTarget && !guardando) {
               setModalAbierto(false);
             }
           }}
@@ -646,17 +1308,23 @@ function Cotizaciones() {
                 <span className="cotizaciones-etiqueta">
                   {cotizacionEditando
                     ? "ACTUALIZAR REGISTRO"
-                    : "NUEVO REGISTRO"}
+                    : cotizacionCopiando
+                      ? `COPIA DE ${cotizacionCopiando.idCotizacion}`
+                      : "NUEVO REGISTRO"}
                 </span>
 
                 <h2>
                   {cotizacionEditando
                     ? "Editar cotización"
-                    : "Crear cotización"}
+                    : cotizacionCopiando
+                      ? "Crear copia de cotización"
+                      : "Crear cotización"}
                 </h2>
 
                 <p>
-                  Completa los datos y agrega los conceptos necesarios.
+                  {cotizacionCopiando
+                    ? `Estás creando una copia de ${cotizacionCopiando.idCotizacion}. Puedes modificar cualquier dato antes de guardarla.`
+                    : "Completa los datos y agrega los conceptos necesarios."}
                 </p>
               </div>
 
@@ -664,6 +1332,7 @@ function Cotizaciones() {
                 type="button"
                 className="cotizacion-modal-cerrar"
                 onClick={() => setModalAbierto(false)}
+                disabled={guardando}
                 title="Cerrar"
               >
                 <X size={21} />
@@ -672,6 +1341,7 @@ function Cotizaciones() {
 
             <form onSubmit={guardarCotizacion}>
               <div className="cotizacion-modal-cuerpo">
+
                 <div className="cotizacion-seccion-titulo">
                   <UserRound size={19} />
                   <h3>Información general</h3>
@@ -679,7 +1349,7 @@ function Cotizaciones() {
 
                 <div className="cotizacion-form-grid">
                   <label className="cotizacion-campo">
-                    <span>Cliente *</span>
+                    <span>Cliente (opcional)</span>
 
                     <div className="cotizacion-input-icono">
                       <UserRound size={17} />
@@ -690,9 +1360,8 @@ function Cotizaciones() {
                           actualizarCampo("idCliente", e.target.value);
                           actualizarCampo("idProyecto", "");
                         }}
-                        required
                       >
-                        <option value="">Selecciona un cliente</option>
+                        <option value="">Sin cliente asociado</option>
 
                         {clientes.map((cliente) => (
                           <option
@@ -738,7 +1407,7 @@ function Cotizaciones() {
                   </label>
 
                   <label className="cotizacion-campo">
-                    <span>Fecha</span>
+                    <span>Fecha *</span>
 
                     <div className="cotizacion-input-icono">
                       <CalendarDays size={17} />
@@ -766,10 +1435,11 @@ function Cotizaciones() {
                           actualizarCampo("estado", e.target.value)
                         }
                       >
-                        <option value="Borrador">Borrador</option>
-                        <option value="Enviada">Enviada</option>
-                        <option value="Aceptada">Aceptada</option>
-                        <option value="Rechazada">Rechazada</option>
+                        {ESTADOS.map((estado) => (
+                          <option key={estado} value={estado}>
+                            {estado}
+                          </option>
+                        ))}
                       </select>
 
                       <ChevronDown size={16} />
@@ -777,7 +1447,8 @@ function Cotizaciones() {
                   </label>
                 </div>
 
-                {/* CONDICIONES EDITABLES POR COTIZACIÓN */}
+                {/* CONDICIONES */}
+
                 <div className="cotizacion-seccion-titulo cotizacion-conceptos-titulo">
                   <FileText size={19} />
                   <h3>Condiciones de la cotización</h3>
@@ -785,16 +1456,11 @@ function Cotizaciones() {
 
                 <div className="cotizacion-form-grid cotizacion-condiciones-grid">
                   <label className="cotizacion-campo">
-                    <span>Anticipo</span>
+                    <span>Forma de pago</span>
 
-                    <textarea
-                      rows="2"
-                      placeholder="Ej. 70% al iniciar, 20% durante la instalación y 10% al finalizar"
-                      value={formulario.anticipo}
-                      onChange={(e) =>
-                        actualizarCampo("anticipo", e.target.value)
-                      }
-                    />
+                    <div className="cotizacion-anticipo-lectura">
+                      {FORMA_PAGO}
+                    </div>
                   </label>
 
                   <label className="cotizacion-campo">
@@ -802,10 +1468,17 @@ function Cotizaciones() {
 
                     <input
                       type="text"
+                      maxLength={200}
                       placeholder="Ej. 30 a 40 días hábiles"
                       value={formulario.entrega}
                       onChange={(e) =>
                         actualizarCampo("entrega", e.target.value)
+                      }
+                      onBlur={() =>
+                        actualizarCampo(
+                          "entrega",
+                          capitalizarPalabras(formulario.entrega)
+                        )
                       }
                     />
                   </label>
@@ -815,14 +1488,23 @@ function Cotizaciones() {
 
                     <input
                       type="text"
+                      maxLength={100}
                       placeholder="Ej. 15 días"
                       value={formulario.validez}
                       onChange={(e) =>
                         actualizarCampo("validez", e.target.value)
                       }
+                      onBlur={() =>
+                        actualizarCampo(
+                          "validez",
+                          capitalizarPalabras(formulario.validez)
+                        )
+                      }
                     />
                   </label>
                 </div>
+
+                {/* CONCEPTOS */}
 
                 <div className="cotizacion-seccion-titulo cotizacion-conceptos-titulo">
                   <ClipboardList size={19} />
@@ -830,8 +1512,8 @@ function Cotizaciones() {
                 </div>
 
                 <p className="cotizacion-ayuda">
-                  Agrega los productos, materiales, servicios o trabajos que
-                  necesites. No hay conceptos predefinidos.
+                  Agrega los productos, materiales, servicios o trabajos
+                  que necesites.
                 </p>
 
                 <div className="cotizacion-conceptos-lista">
@@ -841,22 +1523,75 @@ function Cotizaciones() {
                       (Number(concepto.precioUnitario) || 0);
 
                     return (
-                      <div className="cotizacion-concepto" key={indice}>
+                      <div
+                        className="cotizacion-concepto"
+                        key={indice}
+                      >
                         <div className="cotizacion-concepto-numero">
                           {String(indice + 1).padStart(2, "0")}
                         </div>
 
                         <label className="cotizacion-campo concepto-descripcion">
-                          <span>Descripción</span>
+                          <span>Descripción *</span>
 
                           <input
                             type="text"
+                            maxLength={200}
                             placeholder="Ej. Ventanas de aluminio natural"
                             value={concepto.descripcion}
                             onChange={(e) =>
                               actualizarConcepto(
                                 indice,
                                 "descripcion",
+                                limpiarTexto(e.target.value)
+                              )
+                            }
+                            onBlur={() =>
+                              actualizarConcepto(
+                                indice,
+                                "descripcion",
+                                capitalizarPalabras(
+                                  concepto.descripcion.trim()
+                                )
+                              )
+                            }
+                            required
+                          />
+                        </label>
+
+                        <label className="cotizacion-campo concepto-medida">
+                          <span>Ancho (m) *</span>
+
+                          <input
+                            type="number"
+                            min="0"
+                            max="1000000"
+                            step="0.0001"
+                            value={concepto.ancho}
+                            onChange={(e) =>
+                              actualizarConcepto(
+                                indice,
+                                "ancho",
+                                e.target.value
+                              )
+                            }
+                            required
+                          />
+                        </label>
+
+                        <label className="cotizacion-campo concepto-medida">
+                          <span>Alto (m) *</span>
+
+                          <input
+                            type="number"
+                            min="0"
+                            max="1000000"
+                            step="0.0001"
+                            value={concepto.alto}
+                            onChange={(e) =>
+                              actualizarConcepto(
+                                indice,
+                                "alto",
                                 e.target.value
                               )
                             }
@@ -865,11 +1600,12 @@ function Cotizaciones() {
                         </label>
 
                         <label className="cotizacion-campo concepto-cantidad">
-                          <span>Cantidad</span>
+                          <span>Cantidad *</span>
 
                           <input
                             type="number"
                             min="0.01"
+                            max="1000000"
                             step="0.01"
                             value={concepto.cantidad}
                             onChange={(e) =>
@@ -884,11 +1620,12 @@ function Cotizaciones() {
                         </label>
 
                         <label className="cotizacion-campo concepto-precio">
-                          <span>Precio unitario ($)</span>
+                          <span>Precio unitario ($) *</span>
 
                           <input
                             type="number"
                             min="0"
+                            max="100000000"
                             step="0.01"
                             value={concepto.precioUnitario}
                             onChange={(e) =>
@@ -904,7 +1641,10 @@ function Cotizaciones() {
 
                         <div className="cotizacion-concepto-total">
                           <span>Total</span>
-                          <strong>{formatoDinero(totalConcepto)}</strong>
+
+                          <strong>
+                            {formatoDinero(totalConcepto)}
+                          </strong>
                         </div>
 
                         <button
@@ -929,6 +1669,8 @@ function Cotizaciones() {
                   Agregar otro concepto
                 </button>
 
+                {/* RESUMEN */}
+
                 <div className="cotizacion-resumen-final">
                   <div className="cotizacion-iva-control">
                     <label htmlFor="porcentajeIVA">IVA (%)</label>
@@ -937,10 +1679,14 @@ function Cotizaciones() {
                       id="porcentajeIVA"
                       type="number"
                       min="0"
+                      max="100"
                       step="0.01"
                       value={formulario.porcentajeIVA}
                       onChange={(e) =>
-                        actualizarCampo("porcentajeIVA", e.target.value)
+                        actualizarCampo(
+                          "porcentajeIVA",
+                          e.target.value
+                        )
                       }
                     />
                   </div>
@@ -952,7 +1698,9 @@ function Cotizaciones() {
                     </div>
 
                     <div>
-                      <span>IVA ({formulario.porcentajeIVA || 0}%)</span>
+                      <span>
+                        IVA ({formulario.porcentajeIVA || 0}%)
+                      </span>
                       <strong>{formatoDinero(iva)}</strong>
                     </div>
 
@@ -969,6 +1717,7 @@ function Cotizaciones() {
                   type="button"
                   className="cotizacion-btn-secundario"
                   onClick={() => setModalAbierto(false)}
+                  disabled={guardando}
                 >
                   Cancelar
                 </button>
@@ -976,12 +1725,17 @@ function Cotizaciones() {
                 <button
                   type="submit"
                   className="cotizacion-btn-principal"
+                  disabled={guardando}
                 >
                   <Save size={18} />
 
-                  {cotizacionEditando
-                    ? "Guardar cambios"
-                    : "Guardar cotización"}
+                  {guardando
+                    ? "Guardando..."
+                    : cotizacionEditando
+                      ? "Guardar cambios"
+                      : cotizacionCopiando
+                        ? "Guardar copia"
+                        : "Guardar cotización"}
                 </button>
               </footer>
             </form>
@@ -989,17 +1743,26 @@ function Cotizaciones() {
         </div>
       )}
 
-      {/* MODAL DEL DOCUMENTO */}
+      {/* ==========================================
+          MODAL DEL DOCUMENTO PDF
+      ========================================== */}
+
       {cotizacionDocumento && (
         <div
           className="cotizacion-modal-overlay cotizacion-documento-overlay"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
+            if (
+              e.target === e.currentTarget &&
+              !generandoPDF
+            ) {
               setCotizacionDocumento(null);
             }
           }}
         >
           <section className="cotizacion-modal cotizacion-modal-documento">
+
+            {/* ENCABEZADO DEL MODAL */}
+
             <header className="cotizacion-modal-header no-imprimir">
               <div>
                 <span className="cotizaciones-etiqueta">
@@ -1009,7 +1772,8 @@ function Cotizaciones() {
                 <h2>Generar cotización</h2>
 
                 <p>
-                  Selecciona la información que deseas incluir en el documento.
+                  Selecciona la información que deseas incluir en el
+                  documento.
                 </p>
               </div>
 
@@ -1017,12 +1781,16 @@ function Cotizaciones() {
                 type="button"
                 className="cotizacion-modal-cerrar"
                 onClick={() => setCotizacionDocumento(null)}
+                disabled={generandoPDF}
               >
                 <X size={21} />
               </button>
             </header>
 
             <div className="cotizacion-documento-cuerpo">
+
+              {/* OPCIONES DEL DOCUMENTO */}
+
               <div className="cotizacion-documento-opciones no-imprimir">
                 <h3>Información que se incluirá</h3>
 
@@ -1043,43 +1811,72 @@ function Cotizaciones() {
                     <input
                       type="checkbox"
                       checked={opcionesDocumento[clave]}
-                      onChange={() => cambiarOpcionDocumento(clave)}
+                      onChange={() =>
+                        cambiarOpcionDocumento(clave)
+                      }
                     />
                     {etiqueta}
                   </label>
                 ))}
               </div>
 
-              {/* DOCUMENTO PDF */}
-              <div className="cotizacion-documento-vista">
-                <div className="pdf-plantilla-encabezado">
-                  <div className="pdf-logo">
-                    <strong>A&S</strong>
-                    <span>ALUMINIO Y VIDRIO</span>
-                  </div>
+              {/* DOCUMENTO QUE SE CONVIERTE EN PDF */}
 
-                  <div className="pdf-empresa">
-                    <h2>ACABADOS Y SERVICIOS S.A. DE C.V.</h2>
-                    <p>
-                      Sistemas de Aluminio y Vidrio | Tel: 2226-0408 |
-                      E-mail: acabados_y_servicios@yahoo.com
-                    </p>
-                    <p>
-                      Quinta avenida norte y 31 calle poniente número 413,
-                      San Salvador
-                    </p>
+              <div className="cotizacion-documento-vista">
+
+                {/* ENCABEZADO DE EMPRESA Y COTIZACIÓN */}
+
+                <div className="pdf-plantilla-encabezado">
+
+                  <div className="pdf-encabezado-empresa">
+                    <div className="pdf-logo">
+                      <img
+                        src="/Imagen%201.png"
+                        alt="Logo A&S Aluminio y Vidrio"
+                        className="pdf-logo-imagen"
+                        crossOrigin="anonymous"
+                      />
+                    </div>
+
+                    <div className="pdf-empresa">
+                      <h2>
+                        ACABADOS Y SERVICIOS S.A. DE C.V.
+                      </h2>
+
+                      <p>
+                        Sistemas de Aluminio y Vidrio | Tel: 2226-0408 |
+                        E-mail: acabados_y_servicios@yahoo.com
+                      </p>
+
+                      <p>
+                        Quinta avenida norte y 31 calle poniente número
+                        413, San Salvador
+                      </p>
+                    </div>
                   </div>
 
                   <div className="pdf-titulo">
                     <h2>COTIZACIONES</h2>
-                    <strong>{cotizacionDocumento.idCotizacion}</strong>
+
+                    <strong>
+                      {cotizacionDocumento.idCotizacion}
+                    </strong>
+
+                    <span className="pdf-cliente-nombre">
+                      {cotizacionDocumento.idCliente?.nombre ||
+                        "Sin cliente"}
+                    </span>
+
                     <span>{fechaDocumento}</span>
                   </div>
                 </div>
 
                 <div className="pdf-linea" />
 
+                {/* DATOS DEL CLIENTE Y PROYECTO */}
+
                 <div className="pdf-datos-grid">
+
                   {opcionesDocumento.cliente && (
                     <section className="pdf-datos-bloque">
                       <h3>DATOS DEL CLIENTE</h3>
@@ -1135,7 +1932,10 @@ function Cotizaciones() {
                       </p>
                     </section>
                   )}
+
                 </div>
+
+                {/* DETALLE DE COTIZACIÓN */}
 
                 {opcionesDocumento.conceptos && (
                   <section className="pdf-detalle">
@@ -1146,6 +1946,8 @@ function Cotizaciones() {
                         <tr>
                           <th>ÍTEM</th>
                           <th>DESCRIPCIÓN</th>
+                          <th>ANCHO (m)</th>
+                          <th>ALTO (m)</th>
 
                           {opcionesDocumento.cantidades && (
                             <th>CANTIDAD</th>
@@ -1165,7 +1967,16 @@ function Cotizaciones() {
                           (concepto, indice) => (
                             <tr key={concepto._id || indice}>
                               <td>{indice + 1}</td>
+
                               <td>{concepto.descripcion}</td>
+
+                              <td>
+                                {formatoMedida(concepto.ancho)}
+                              </td>
+
+                              <td>
+                                {formatoMedida(concepto.alto)}
+                              </td>
 
                               {opcionesDocumento.cantidades && (
                                 <td>{concepto.cantidad}</td>
@@ -1195,13 +2006,16 @@ function Cotizaciones() {
                   </section>
                 )}
 
+                {/* CONDICIONES COMERCIALES Y TOTALES */}
+
                 <div className="pdf-parte-inferior">
+
                   <section className="pdf-condiciones-comerciales">
                     <h3>CONDICIONES COMERCIALES</h3>
 
                     <p>
-                      <strong>ANTICIPO:</strong>{" "}
-                      {cotizacionDocumento.anticipo || "No especificado"}
+                      <strong>FORMA DE PAGO:</strong>{" "}
+                      {FORMA_PAGO}
                     </p>
 
                     <p>
@@ -1216,9 +2030,11 @@ function Cotizaciones() {
                   </section>
 
                   <section className="pdf-totales">
+
                     {opcionesDocumento.subtotal && (
                       <p>
                         <span>SUBTOTAL</span>
+
                         <strong>
                           {formatoDinero(cotizacionDocumento.subtotal)}
                         </strong>
@@ -1230,6 +2046,7 @@ function Cotizaciones() {
                         <span>
                           IVA ({cotizacionDocumento.porcentajeIVA ?? 13}%)
                         </span>
+
                         <strong>
                           {formatoDinero(cotizacionDocumento.iva)}
                         </strong>
@@ -1239,108 +2056,120 @@ function Cotizaciones() {
                     {opcionesDocumento.total && (
                       <p className="pdf-total-general">
                         <span>TOTAL GENERAL</span>
+
                         <strong>
                           {formatoDinero(cotizacionDocumento.totalGeneral)}
                         </strong>
                       </p>
                     )}
+
                   </section>
                 </div>
+
+                {/* CONDICIONES GENERALES */}
 
                 <section className="pdf-condiciones-generales">
                   <h3>CONDICIONES GENERALES DEL CONTRATO</h3>
 
                   <div className="pdf-condiciones-columnas">
+
                     <div>
                       <p>
-                        <strong>A)</strong> El Cliente pagará el valor de este
-                        contrato de acuerdo con los términos y condiciones
-                        contratadas.
+                        <strong>A)</strong> El Cliente pagará el valor
+                        de este contrato de acuerdo con los términos y
+                        condiciones contratadas.
                       </p>
 
                       <p>
-                        <strong>B)</strong> El Cliente autoriza los trabajos
-                        de acuerdo con lo expresado en la presente cotización,
-                        con los valores y medidas acordadas.
+                        <strong>B)</strong> El Cliente autoriza los
+                        trabajos de acuerdo con lo expresado en la
+                        presente cotización, con los valores y medidas
+                        acordadas.
                       </p>
 
                       <p>
-                        <strong>C)</strong> El tiempo de ejecución se realizará
-                        en días y horas hábiles. Los trabajos nocturnos podrán
-                        generar costos adicionales.
+                        <strong>C)</strong> El tiempo de ejecución se
+                        realizará en días y horas hábiles. Los trabajos
+                        nocturnos podrán generar costos adicionales.
                       </p>
 
                       <p>
-                        <strong>D)</strong> El cliente deberá proveer un lugar
-                        seguro para el almacenamiento de materiales y
-                        herramientas.
+                        <strong>D)</strong> El cliente deberá proveer
+                        un lugar seguro para el almacenamiento de
+                        materiales y herramientas.
                       </p>
 
                       <p>
-                        <strong>E)</strong> El cliente proveerá alimentación
-                        eléctrica para las herramientas a una distancia
-                        máxima de 25 m.
+                        <strong>E)</strong> El cliente proveerá
+                        alimentación eléctrica para las herramientas a
+                        una distancia máxima de 25 m.
                       </p>
 
                       <p>
-                        <strong>F)</strong> El cliente deberá mantener el área
-                        de trabajo libre de materiales u objetos que impidan
-                        la instalación.
+                        <strong>F)</strong> El cliente deberá mantener
+                        el área de trabajo libre de materiales u objetos
+                        que impidan la instalación.
                       </p>
 
                       <p>
-                        <strong>G)</strong> La fecha de inicio se confirmará
-                        después de recibido el anticipo e incluido el proyecto
-                        en la programación.
+                        <strong>G)</strong> La fecha de inicio se
+                        confirmará después de recibido el anticipo e
+                        incluido el proyecto en la programación.
                       </p>
                     </div>
 
                     <div>
                       <p>
-                        <strong>H)</strong> Una vez cancelado el anticipo, el
-                        proyecto deberá ejecutarse en un plazo no mayor a 90
-                        días o según lo negociado.
+                        <strong>H)</strong> Una vez cancelado el
+                        anticipo, el proyecto deberá ejecutarse en un
+                        plazo no mayor a 90 días o según lo negociado.
                       </p>
 
                       <p>
-                        <strong>I)</strong> Si se requiere devolución del
-                        anticipo, la empresa se reserva el derecho de retener
-                        el 10 % por operaciones realizadas.
+                        <strong>I)</strong> Si se requiere devolución
+                        del anticipo, la empresa se reserva el derecho
+                        de retener el 10 % por operaciones realizadas.
                       </p>
 
                       <p>
-                        <strong>J)</strong> El material será propiedad de
-                        ACABADOS Y SERVICIOS S.A. DE C.V. mientras no haya sido
-                        cancelado en su totalidad.
+                        <strong>J)</strong> El material será propiedad
+                        de ACABADOS Y SERVICIOS S.A. DE C.V. mientras
+                        no haya sido cancelado en su totalidad.
                       </p>
 
                       <p>
-                        <strong>K)</strong> Se brinda garantía de un año en
-                        instalaciones y 10 años en materiales, excluyendo
-                        vidrio, bajo las condiciones establecidas.
+                        <strong>K)</strong> Se brinda garantía de un
+                        año en instalaciones y 10 años en materiales,
+                        excluyendo vidrio, bajo las condiciones
+                        establecidas.
                       </p>
 
                       <p>
-                        <strong>L)</strong> Los materiales cuentan con garantía
-                        contra desperfectos de fabricación según las políticas
-                        del fabricante.
+                        <strong>L)</strong> Los materiales cuentan con
+                        garantía contra desperfectos de fabricación
+                        según las políticas del fabricante.
                       </p>
 
                       <p>
-                        <strong>M)</strong> La empresa se reserva el dominio
-                        de lo vendido mientras no esté totalmente pagado.
+                        <strong>M)</strong> La empresa se reserva el
+                        dominio de lo vendido mientras no esté
+                        totalmente pagado.
                       </p>
 
                       <p>
-                        <strong>N)</strong> La validez de esta oferta será la
-                        indicada en las condiciones comerciales de esta
-                        cotización.
+                        <strong>N)</strong> La validez de esta oferta
+                        será la indicada en las condiciones comerciales
+                        de esta cotización.
                       </p>
                     </div>
+
                   </div>
                 </section>
 
+                {/* FIRMAS */}
+
                 <div className="pdf-firmas">
+
                   <div>
                     <span />
                     <strong>CLIENTE</strong>
@@ -1352,15 +2181,21 @@ function Cotizaciones() {
                     <strong>ACABADOS Y SERVICIOS S.A. DE C.V.</strong>
                     <small>Firma autorizada</small>
                   </div>
+
                 </div>
+
               </div>
             </div>
 
+            {/* BOTONES DEL MODAL */}
+
             <footer className="cotizacion-modal-footer no-imprimir">
+
               <button
                 type="button"
                 className="cotizacion-btn-secundario"
                 onClick={() => setCotizacionDocumento(null)}
+                disabled={generandoPDF}
               >
                 Cerrar
               </button>
@@ -1377,45 +2212,13 @@ function Cotizaciones() {
                   ? "Generando PDF..."
                   : "Descargar PDF"}
               </button>
+
             </footer>
+
           </section>
         </div>
       )}
 
-      {/* CONFIRMACIÓN DE ELIMINACIÓN */}
-      {cotizacionEliminar && (
-        <div className="as-confirmacion-overlay">
-          <section className="as-confirmacion-modal">
-            <div className="as-confirmacion-icono">
-              <Trash2 size={27} />
-            </div>
-
-            <h2>¿Eliminar cotización?</h2>
-
-            <p>
-              ¿Estás seguro de que deseas eliminar la cotización{" "}
-              <strong>{cotizacionEliminar.idCotizacion}</strong>? Esta acción
-              no se puede deshacer.
-            </p>
-
-            <div className="as-confirmacion-acciones">
-              <button
-                className="as-confirmacion-cancelar"
-                onClick={() => setCotizacionEliminar(null)}
-              >
-                Cancelar
-              </button>
-
-              <button
-                className="as-confirmacion-eliminar"
-                onClick={confirmarEliminacion}
-              >
-                Sí, eliminar
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
     </main>
   );
 }

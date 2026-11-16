@@ -1,59 +1,131 @@
 
-import toast from "react-hot-toast";
+import Swal from "sweetalert2";
+import "./notificaciones.css";
+
+const configuracion = {
+  confirmButtonColor: "#0C133F",
+  cancelButtonColor: "#E5E7EB",
+  buttonsStyling: false,
+  customClass: {
+    popup: "as-alerta-popup",
+    title: "as-alerta-titulo",
+    htmlContainer: "as-alerta-texto",
+    confirmButton: "as-alerta-confirmar",
+    cancelButton: "as-alerta-cancelar",
+    denyButton: "as-alerta-denegar",
+    icon: "as-alerta-icono",
+  },
+};
 
 const notificaciones = {
-  // Notificación de éxito
-  exito: (mensaje) =>
-    toast.success(mensaje, {
-      duration: 3500,
+  exito: (mensaje, titulo = "¡Operación exitosa!") =>
+    Swal.fire({
+      ...configuracion,
+      icon: "success",
+      title: titulo,
+      text: mensaje,
+      confirmButtonText: "Aceptar",
     }),
 
-  // Alias para compatibilidad
-  success: (mensaje) =>
-    toast.success(mensaje, {
-      duration: 3500,
+  success: (mensaje, titulo) =>
+    notificaciones.exito(mensaje, titulo),
+
+  error: (mensaje, titulo = "Ha ocurrido un error") =>
+    Swal.fire({
+      ...configuracion,
+      icon: "error",
+      title: titulo,
+      text: mensaje,
+      confirmButtonText: "Entendido",
     }),
 
-  // Notificación de error
-  error: (mensaje) =>
-    toast.error(mensaje, {
-      duration: 4500,
+  informacion: (mensaje, titulo = "Información") =>
+    Swal.fire({
+      ...configuracion,
+      icon: "info",
+      title: titulo,
+      text: mensaje,
+      confirmButtonText: "Aceptar",
     }),
 
-  // Notificación informativa
-  informacion: (mensaje) =>
-    toast(mensaje, {
-      duration: 3500,
+  info: (mensaje, titulo) =>
+    notificaciones.informacion(mensaje, titulo),
+
+  advertencia: (mensaje, titulo = "Atención") =>
+    Swal.fire({
+      ...configuracion,
+      icon: "warning",
+      title: titulo,
+      text: mensaje,
+      confirmButtonText: "Entendido",
     }),
 
-  // Alias para compatibilidad
-  info: (mensaje) =>
-    toast(mensaje, {
-      duration: 3500,
+  confirmar: async (
+    mensaje,
+    titulo = "¿Estás seguro?",
+    textoConfirmar = "Sí, continuar"
+  ) => {
+    const resultado = await Swal.fire({
+      ...configuracion,
+      icon: "warning",
+      title: titulo,
+      text: mensaje,
+      showCancelButton: true,
+      confirmButtonText: textoConfirmar,
+      cancelButtonText: "Cancelar",
+      reverseButtons: true,
+      focusCancel: true,
+    });
+
+    return resultado.isConfirmed;
+  },
+
+  carga: (mensaje = "Procesando, por favor espera...") =>
+    Swal.fire({
+      ...configuracion,
+      title: "Un momento",
+      text: mensaje,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
     }),
 
-  // Notificación de carga
-  carga: (mensaje) =>
-    toast.loading(mensaje),
+  loading: (mensaje) => notificaciones.carga(mensaje),
 
-  // Alias para compatibilidad
-  loading: (mensaje) =>
-    toast.loading(mensaje),
+  cerrar: () => Swal.close(),
 
-  // Cerrar una notificación
-  cerrar: (id) =>
-    toast.dismiss(id),
+  dismiss: () => Swal.close(),
 
-  // Alias para compatibilidad
-  dismiss: (id) =>
-    toast.dismiss(id),
+  promesa: async (operacion, mensajes = {}) => {
+    notificaciones.carga(
+      mensajes.loading || "Procesando, por favor espera..."
+    );
 
-  // Notificaciones basadas en promesas
-  promesa: (promesa, mensajes) =>
-    toast.promise(promesa, mensajes),
+    try {
+      const resultado = await operacion;
 
-  promise: (promesa, mensajes) =>
-    toast.promise(promesa, mensajes),
+      Swal.close();
+
+      await notificaciones.exito(
+        mensajes.success || "La operación se completó correctamente."
+      );
+
+      return resultado;
+    } catch (error) {
+      Swal.close();
+
+      await notificaciones.error(
+        mensajes.error || "No fue posible completar la operación."
+      );
+
+      throw error;
+    }
+  },
 };
+
+notificaciones.promise = notificaciones.promesa;
 
 export default notificaciones;

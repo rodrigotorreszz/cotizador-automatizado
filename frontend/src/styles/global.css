@@ -339,41 +339,51 @@ button, input, select, textarea {
 
 /* =========================================
    NOTIFICACIONES DINÁMICAS A&S
+   ALERTAS GRANDES Y CENTRADAS
 ========================================= */
 
 .as-toast {
   font-family: 'Inter', sans-serif !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
   font-weight: 600 !important;
-  padding: 16px 20px !important;
-  border-radius: 14px !important;
+
+  min-width: 340px !important;
+  max-width: 480px !important;
+
+  padding: 23px 28px !important;
+
+  border-radius: 18px !important;
   background: #0C133F !important;
   color: #FFFFFF !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  box-shadow: 0 12px 35px rgba(12,19,63,0.22) !important;
-  max-width: 380px !important;
+
+  border: 1px solid rgba(255,255,255,0.15) !important;
+
+  box-shadow:
+    0 20px 60px rgba(12,19,63,0.30),
+    0 5px 15px rgba(0,0,0,0.08) !important;
+
   animation: as-toast-entrada 0.4s cubic-bezier(.21,1.02,.73,1) both;
+}
+
+.as-toast svg {
+  flex-shrink: 0;
 }
 
 @keyframes as-toast-entrada {
   0% {
     opacity: 0;
-    transform: translateX(45px) scale(0.92);
+    transform: translateY(25px) scale(0.85);
   }
 
   70% {
     opacity: 1;
-    transform: translateX(-5px) scale(1.01);
+    transform: translateY(-4px) scale(1.03);
   }
 
   100% {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateY(0) scale(1);
   }
-}
-
-.as-toast svg {
-  flex-shrink: 0;
 }
 
 /* =========================================
@@ -572,8 +582,11 @@ button, input, select, textarea {
 
 @media (max-width: 480px) {
   .as-toast {
-    max-width: calc(100vw - 35px) !important;
-    font-size: 13px !important;
+    min-width: 0 !important;
+    width: 85vw !important;
+    max-width: 85vw !important;
+    padding: 18px 20px !important;
+    font-size: 14px !important;
   }
 
   .as-confirmacion-modal {
