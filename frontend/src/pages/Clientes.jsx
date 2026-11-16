@@ -40,6 +40,22 @@ const capitalizar = (valor) =>
     .replace(/\b\p{L}/gu, (letra) => letra.toUpperCase());
 
 // ==========================================
+// FORMATEAR TELÉFONO
+// ==========================================
+
+const formatearTelefono = (valor) => {
+  const numeros = String(valor ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 8);
+
+  if (numeros.length > 4) {
+    return `${numeros.slice(0, 4)}-${numeros.slice(4)}`;
+  }
+
+  return numeros;
+};
+
+// ==========================================
 // GENERAR ID VISUAL
 // ==========================================
 
@@ -68,9 +84,11 @@ function normalizarCliente(cliente) {
     // MongoDB utiliza nombre
     empresa: cliente.empresa ?? cliente.nombre ?? "",
 
+    // Dirección completa del cliente
     direccion: cliente.direccion ?? "",
 
-    telefono: cliente.telefono ?? "",
+    // Mostrar teléfono con formato 0000-0000
+    telefono: formatearTelefono(cliente.telefono),
 
     // MongoDB utiliza correo
     email: cliente.email ?? cliente.correo ?? "",
@@ -90,9 +108,11 @@ function prepararDatos(cliente) {
     // Coincidir con el modelo de MongoDB
     nombre: capitalizar(cliente.empresa),
 
-    direccion: capitalizar(cliente.direccion),
+    // Conservar exactamente la dirección escrita
+    direccion: obtenerTexto(cliente.direccion),
 
-    telefono: obtenerTexto(cliente.telefono),
+    // Guardar teléfono con formato 0000-0000
+    telefono: formatearTelefono(cliente.telefono),
 
     correo: obtenerTexto(cliente.email).toLowerCase(),
 
@@ -128,7 +148,6 @@ function Clientes() {
       const clientesNormalizados = datos.map(normalizarCliente);
 
       setClientes(clientesNormalizados);
-
     } catch (error) {
       console.error("Error al cargar clientes:", error);
 
@@ -139,7 +158,6 @@ function Clientes() {
           error.response?.data?.message ||
           "No se pudieron obtener los clientes del servidor.",
       });
-
     } finally {
       setCargando(false);
     }
@@ -185,7 +203,7 @@ function Clientes() {
     const telefono = obtenerTexto(cliente.telefono);
     const email = obtenerTexto(cliente.email);
 
-    if (telefono && !/^\d{8}$/.test(telefono)) {
+    if (telefono && !/^\d{4}-\d{4}$/.test(formatearTelefono(telefono))) {
       Swal.fire({
         icon: "warning",
         title: "Teléfono inválido",
@@ -266,7 +284,6 @@ function Clientes() {
         timer: 1800,
         showConfirmButton: false,
       });
-
     } catch (error) {
       console.error("Error al crear cliente:", error);
 
@@ -278,7 +295,6 @@ function Clientes() {
           error.response?.data?.error ||
           "Ocurrió un problema al guardar el cliente.",
       });
-
     } finally {
       setGuardando(null);
     }
@@ -313,7 +329,6 @@ function Clientes() {
         timer: 1500,
         showConfirmButton: false,
       });
-
     } catch (error) {
       console.error("Error al actualizar cliente:", error);
 
@@ -325,7 +340,6 @@ function Clientes() {
           error.response?.data?.error ||
           "No se pudieron guardar los cambios.",
       });
-
     } finally {
       setGuardando(null);
     }
@@ -363,7 +377,6 @@ function Clientes() {
         timer: 1500,
         showConfirmButton: false,
       });
-
     } catch (error) {
       console.error("Error al eliminar cliente:", error);
 
@@ -403,7 +416,6 @@ function Clientes() {
 
   return (
     <div className="clientes-page">
-
       {/* ENCABEZADO */}
 
       <div className="clientes-header">
@@ -420,7 +432,6 @@ function Clientes() {
         </div>
 
         <div className="clientes-header-actions">
-
           <button
             type="button"
             className="btn-clientes-secundario"
@@ -445,14 +456,12 @@ function Clientes() {
 
             Nuevo cliente
           </button>
-
         </div>
       </div>
 
       {/* RESUMEN */}
 
       <div className="clientes-resumen">
-
         <div className="clientes-resumen-icono">
           <Users size={23} />
         </div>
@@ -462,17 +471,14 @@ function Clientes() {
 
           <strong>{clientes.length}</strong>
         </div>
-
       </div>
 
       {/* TABLA */}
 
       <div className="clientes-tabla-contenedor">
-
         {/* BARRA SUPERIOR */}
 
         <div className="clientes-tabla-toolbar">
-
           <div>
             <h2>Directorio de clientes</h2>
 
@@ -491,20 +497,17 @@ function Clientes() {
               onChange={(e) => setBusqueda(e.target.value)}
             />
           </div>
-
         </div>
 
         {/* TABLA RESPONSIVE */}
 
         <div className="clientes-tabla-scroll">
-
           <table className="clientes-tabla">
-
             <thead>
               <tr>
                 <th>ID CLIENTE</th>
                 <th>EMPRESA</th>
-                <th>DIRECCIÓN</th>
+                <th>DIRECCIÓN COMPLETA</th>
                 <th>TELÉFONO</th>
                 <th>E-MAIL</th>
                 <th>ATENCIÓN A</th>
@@ -512,12 +515,10 @@ function Clientes() {
             </thead>
 
             <tbody>
-
               {/* NUEVO CLIENTE */}
 
               {filaNueva && (
                 <tr className="fila-nueva">
-
                   <td>
                     <span className="cliente-id">
                       {filaNueva.idCliente}
@@ -541,7 +542,8 @@ function Clientes() {
                   <td>
                     <input
                       value={filaNueva.direccion}
-                      placeholder="Dirección"
+                      placeholder="Calle, colonia, casa, municipio..."
+                      title="Escribí la dirección completa del cliente"
                       onChange={(e) =>
                         actualizarCampoNuevo(
                           "direccion",
@@ -553,14 +555,15 @@ function Clientes() {
 
                   <td>
                     <input
+                      type="text"
                       value={filaNueva.telefono}
-                      placeholder="00000000"
-                      maxLength={8}
+                      placeholder="0000-0000"
+                      maxLength={9}
                       inputMode="numeric"
                       onChange={(e) =>
                         actualizarCampoNuevo(
                           "telefono",
-                          e.target.value.replace(/\D/g, "").slice(0, 8)
+                          formatearTelefono(e.target.value)
                         )
                       }
                     />
@@ -582,7 +585,6 @@ function Clientes() {
 
                   <td>
                     <div className="celda-atencion">
-
                       <input
                         value={filaNueva.atencionA}
                         placeholder="Persona de contacto"
@@ -612,10 +614,8 @@ function Clientes() {
                       >
                         <X size={17} />
                       </button>
-
                     </div>
                   </td>
-
                 </tr>
               )}
 
@@ -630,9 +630,7 @@ function Clientes() {
                     Cargando clientes...
                   </td>
                 </tr>
-
               ) : clientesFiltrados.length === 0 && !filaNueva ? (
-
                 /* SIN RESULTADOS */
 
                 <tr>
@@ -645,15 +643,11 @@ function Clientes() {
                       : "No hay clientes registrados."}
                   </td>
                 </tr>
-
               ) : (
-
                 /* CLIENTES REGISTRADOS */
 
                 clientesFiltrados.map((cliente) => (
-
                   <tr key={cliente._id || cliente.idCliente}>
-
                     <td>
                       <span className="cliente-id">
                         {cliente.idCliente}
@@ -677,7 +671,8 @@ function Clientes() {
                     <td>
                       <input
                         value={cliente.direccion}
-                        placeholder="Dirección"
+                        placeholder="Calle, colonia, casa, municipio..."
+                        title="Escribí la dirección completa del cliente"
                         onChange={(e) =>
                           actualizarCampo(
                             cliente.idCliente,
@@ -690,15 +685,16 @@ function Clientes() {
 
                     <td>
                       <input
+                        type="text"
                         value={cliente.telefono}
-                        placeholder="00000000"
-                        maxLength={8}
+                        placeholder="0000-0000"
+                        maxLength={9}
                         inputMode="numeric"
                         onChange={(e) =>
                           actualizarCampo(
                             cliente.idCliente,
                             "telefono",
-                            e.target.value.replace(/\D/g, "").slice(0, 8)
+                            formatearTelefono(e.target.value)
                           )
                         }
                       />
@@ -721,7 +717,6 @@ function Clientes() {
 
                     <td>
                       <div className="celda-atencion">
-
                         <input
                           value={cliente.atencionA}
                           placeholder="Persona de contacto"
@@ -752,19 +747,13 @@ function Clientes() {
                         >
                           <Trash2 size={17} />
                         </button>
-
                       </div>
                     </td>
-
                   </tr>
-
                 ))
               )}
-
             </tbody>
-
           </table>
-
         </div>
 
         {/* PIE DE TABLA */}
@@ -774,7 +763,6 @@ function Clientes() {
             Los campos son opcionales. Guardá cada fila después de editarla.
           </span>
         </div>
-
       </div>
     </div>
   );

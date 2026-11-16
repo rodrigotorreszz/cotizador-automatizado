@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const clienteSchema = new mongoose.Schema(
@@ -16,29 +15,14 @@ const clienteSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Dirección completa del cliente
     direccion: {
       type: String,
       trim: true,
-      enum: [
-        "",
-        "Ahuachapán",
-        "Santa Ana",
-        "Sonsonate",
-        "Chalatenango",
-        "La Libertad",
-        "San Salvador",
-        "Cuscatlán",
-        "La Paz",
-        "Cabañas",
-        "San Vicente",
-        "Usulután",
-        "San Miguel",
-        "Morazán",
-        "La Unión",
-      ],
       default: "",
     },
 
+    // Referencia adicional de ubicación
     subdireccion: {
       type: String,
       trim: true,
