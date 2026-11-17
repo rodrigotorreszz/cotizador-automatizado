@@ -34,12 +34,14 @@ const origenesPermitidos = [
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
 
+  // Electron - aplicación de escritorio
+  "http://localhost:1420",
+  "http://127.0.0.1:1420",
+  "app://localhost",
+
   // Vista previa
   "http://localhost:4173",
   "http://127.0.0.1:4173",
-
-  // Electron - aplicación de escritorio
-  "app://localhost",
 ];
 
 // ========================================
