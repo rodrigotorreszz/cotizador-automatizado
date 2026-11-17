@@ -48,7 +48,7 @@ const formatearTelefono = (valor) => {
     .replace(/\D/g, "")
     .slice(0, 8);
 
-  if (numeros.length > 4) {
+  if (numeros.length >= 4) {
     return `${numeros.slice(0, 4)}-${numeros.slice(4)}`;
   }
 

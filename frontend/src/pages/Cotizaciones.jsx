@@ -41,7 +41,7 @@ const conceptoVacio = () => ({
   ancho: "0",
   alto: "0",
   cantidad: "1",
-  precioUnitario: "0",
+  precioUnitario: "",
 });
 
 // ==========================================
@@ -111,7 +111,24 @@ const formatoDinero = (cantidad) =>
   }).format(Number(cantidad) || 0);
 
 const formatoMedida = (valor) =>
-  Number(valor || 0).toFixed(4);
+  Number(valor ?? 0).toFixed(4);
+
+// ==========================================
+// NORMALIZAR CONCEPTOS
+// ==========================================
+
+const normalizarConcepto = (concepto = {}) => ({
+  descripcion: concepto.descripcion || "",
+  ancho: String(concepto.ancho ?? 0),
+  alto: String(concepto.alto ?? 0),
+  cantidad: String(concepto.cantidad ?? 1),
+  precioUnitario:
+    concepto.precioUnitario === 0 ||
+    concepto.precioUnitario === null ||
+    concepto.precioUnitario === undefined
+      ? ""
+      : String(concepto.precioUnitario),
+});
 
 // ==========================================
 // ALERTAS
@@ -202,6 +219,22 @@ function Cotizaciones() {
   const [formulario, setFormulario] = useState(formularioInicial);
 
   // ==========================================
+  // BLOQUEAR DESPLAZAMIENTO DEL FONDO
+  // ==========================================
+
+  useEffect(() => {
+    if (!modalAbierto && !cotizacionDocumento) return;
+
+    const overflowAnterior = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+    };
+  }, [modalAbierto, cotizacionDocumento]);
+
+  // ==========================================
   // CARGAR INFORMACIÓN
   // ==========================================
 
@@ -238,6 +271,16 @@ function Cotizaciones() {
   useEffect(() => {
     cargarDatos();
   }, []);
+
+  // ==========================================
+  // ESTADO DE COTIZACIÓN
+  // ==========================================
+
+  const obtenerEstadoCotizacion = (cotizacion) => {
+    return cotizacion.idProyecto?.estado === "Aprobado"
+      ? "Aceptada"
+      : cotizacion.estado || "Borrador";
+  };
 
   // ==========================================
   // PROYECTOS DEL CLIENTE
@@ -368,24 +411,16 @@ function Cotizaciones() {
         : fechaActual(),
 
       porcentajeIVA: String(cotizacion.porcentajeIVA ?? 13),
-      estado: cotizacion.estado || "Borrador",
+      estado: obtenerEstadoCotizacion(cotizacion),
 
-      // La forma de pago siempre será fija
-      anticipo: FORMA_PAGO,
-
+      anticipo: cotizacion.anticipo || FORMA_PAGO,
       entrega: cotizacion.entrega || "",
       validez: cotizacion.validez || "15 días",
 
       conceptos:
         Array.isArray(cotizacion.conceptos) &&
         cotizacion.conceptos.length > 0
-          ? cotizacion.conceptos.map((concepto) => ({
-              descripcion: concepto.descripcion || "",
-              ancho: String(concepto.ancho ?? 0),
-              alto: String(concepto.alto ?? 0),
-              cantidad: String(concepto.cantidad ?? 1),
-              precioUnitario: String(concepto.precioUnitario ?? 0),
-            }))
+          ? cotizacion.conceptos.map(normalizarConcepto)
           : [conceptoVacio()],
     });
 
@@ -415,13 +450,7 @@ function Cotizaciones() {
     const conceptos =
       Array.isArray(cotizacion.conceptos) &&
       cotizacion.conceptos.length > 0
-        ? cotizacion.conceptos.map((concepto) => ({
-            descripcion: concepto.descripcion || "",
-            ancho: String(concepto.ancho ?? 0),
-            alto: String(concepto.alto ?? 0),
-            cantidad: String(concepto.cantidad ?? 1),
-            precioUnitario: String(concepto.precioUnitario ?? 0),
-          }))
+        ? cotizacion.conceptos.map(normalizarConcepto)
         : [conceptoVacio()];
 
     setFormulario({
@@ -430,10 +459,7 @@ function Cotizaciones() {
       fecha: fechaActual(),
       porcentajeIVA: String(cotizacion.porcentajeIVA ?? 13),
       estado: "Borrador",
-
-      // La copia también utiliza la forma de pago fija
       anticipo: FORMA_PAGO,
-
       entrega: cotizacion.entrega || "",
       validez: cotizacion.validez || "15 días",
       conceptos,
@@ -464,12 +490,54 @@ function Cotizaciones() {
     }));
   };
 
+  // ==========================================
+  // CONTROL DE MEDIDAS
+  // ==========================================
+
+  const manejarFocoMedida = (indice, campo, valor) => {
+    if (valor === "0") {
+      actualizarConcepto(indice, campo, "");
+    }
+  };
+
+  const manejarSalidaMedida = (indice, campo, valor) => {
+    if (valor === "") {
+      actualizarConcepto(indice, campo, "0");
+    }
+  };
+
+  // ==========================================
+  // CONTROL DE PRECIO UNITARIO
+  // ==========================================
+
+  const manejarFocoPrecio = (indice, valor) => {
+    if (valor === "0") {
+      actualizarConcepto(indice, "precioUnitario", "");
+    }
+  };
+
+  const manejarSalidaPrecio = (indice, valor) => {
+    // Se deja vacío para que el usuario pueda identificar
+    // que todavía no ha ingresado un precio.
+    if (valor === "0") {
+      actualizarConcepto(indice, "precioUnitario", "");
+    }
+  };
+
+  // ==========================================
+  // AGREGAR CONCEPTO
+  // ==========================================
+
   const agregarConcepto = () => {
     setFormulario((anterior) => ({
       ...anterior,
       conceptos: [...anterior.conceptos, conceptoVacio()],
     }));
   };
+
+  // ==========================================
+  // ELIMINAR CONCEPTO
+  // ==========================================
 
   const eliminarConcepto = async (indice) => {
     if (formulario.conceptos.length === 1) {
@@ -494,32 +562,30 @@ function Cotizaciones() {
   // ==========================================
 
   const validarFormulario = () => {
-    if (formulario.idCliente) {
-      const clienteExiste = clientes.some(
-        (cliente) =>
-          String(cliente.idCliente) === String(formulario.idCliente)
+    if (!formulario.idCliente) {
+      alerta(
+        "warning",
+        "Cliente obligatorio",
+        "Selecciona un cliente para registrar la cotización."
       );
+      return false;
+    }
 
-      if (!clienteExiste) {
-        alerta(
-          "warning",
-          "Cliente no válido",
-          "El cliente seleccionado ya no está disponible. Actualiza la lista."
-        );
-        return false;
-      }
+    const clienteExiste = clientes.some(
+      (cliente) =>
+        String(cliente.idCliente) === String(formulario.idCliente)
+    );
+
+    if (!clienteExiste) {
+      alerta(
+        "warning",
+        "Cliente no válido",
+        "El cliente seleccionado ya no está disponible. Actualiza la lista."
+      );
+      return false;
     }
 
     if (formulario.idProyecto) {
-      if (!formulario.idCliente) {
-        alerta(
-          "warning",
-          "Selecciona un cliente",
-          "Para asociar un proyecto primero debes seleccionar su cliente."
-        );
-        return false;
-      }
-
       const proyectoValido = proyectosDelCliente.some(
         (proyecto) =>
           String(proyecto.idProyecto) === String(formulario.idProyecto)
@@ -574,6 +640,15 @@ function Cotizaciones() {
       return false;
     }
 
+    if (formulario.anticipo.length > 500) {
+      alerta(
+        "warning",
+        "Forma de pago demasiado larga",
+        "La forma de pago admite hasta 500 caracteres."
+      );
+      return false;
+    }
+
     if (
       !Array.isArray(formulario.conceptos) ||
       formulario.conceptos.length === 0
@@ -604,6 +679,7 @@ function Cotizaciones() {
       }
 
       if (
+        concepto.ancho === "" ||
         !Number.isFinite(ancho) ||
         ancho < 0 ||
         ancho > 1000000 ||
@@ -618,6 +694,7 @@ function Cotizaciones() {
       }
 
       if (
+        concepto.alto === "" ||
         !Number.isFinite(alto) ||
         alto < 0 ||
         alto > 1000000 ||
@@ -632,19 +709,21 @@ function Cotizaciones() {
       }
 
       if (
-        !Number.isFinite(cantidad) ||
-        cantidad <= 0 ||
+        !Number.isInteger(cantidad) ||
+        cantidad < 1 ||
         cantidad > 1000000
       ) {
         alerta(
           "warning",
           `Cantidad del concepto ${i + 1}`,
-          "La cantidad debe ser mayor que cero y no exceder 1,000,000."
+          "La cantidad debe ser un número entero entre 1 y 1,000,000."
         );
         return false;
       }
 
       if (
+        concepto.precioUnitario === "" ||
+        concepto.precioUnitario === null ||
         !Number.isFinite(precio) ||
         precio < 0 ||
         precio > 100000000
@@ -652,7 +731,7 @@ function Cotizaciones() {
         alerta(
           "warning",
           `Precio del concepto ${i + 1}`,
-          "El precio debe ser un número igual o mayor que cero."
+          "Ingresa un precio unitario válido."
         );
         return false;
       }
@@ -691,15 +770,26 @@ function Cotizaciones() {
     const esEdicion = Boolean(cotizacionEditando);
     const esCopia = Boolean(cotizacionCopiando);
 
+    const proyectoSeleccionado = proyectosDelCliente.find(
+      (proyecto) =>
+        String(proyecto.idProyecto) === String(formulario.idProyecto)
+    );
+
+    const estadoFinal =
+      proyectoSeleccionado?.estado === "Aprobado"
+        ? "Aceptada"
+        : esCopia
+          ? "Borrador"
+          : formulario.estado;
+
     const datos = {
-      idCliente: formulario.idCliente || null,
+      idCliente: formulario.idCliente,
       idProyecto: formulario.idProyecto || null,
       fecha: formulario.fecha,
       porcentajeIVA: Number(formulario.porcentajeIVA),
-      estado: formulario.estado,
+      estado: estadoFinal,
 
-      // Se guarda siempre la misma forma de pago
-      anticipo: FORMA_PAGO,
+      anticipo: formulario.anticipo.trim(),
 
       entrega: capitalizarPalabras(formulario.entrega.trim()),
       validez: capitalizarPalabras(formulario.validez.trim()),
@@ -710,6 +800,7 @@ function Cotizaciones() {
           ? cotizacionEditando.cotizacionOrigen || null
           : null,
 
+      // Se conservan las medidas al guardar o actualizar.
       conceptos: formulario.conceptos.map((concepto) => ({
         descripcion: capitalizarPalabras(
           limpiarTexto(concepto.descripcion).trim()
@@ -963,7 +1054,7 @@ function Cotizaciones() {
 
           jsPDF: {
             unit: "mm",
-            format: "a4",
+            format: "letter",
             orientation: "landscape",
           },
 
@@ -981,17 +1072,14 @@ function Cotizaciones() {
         .from(elemento)
         .save();
 
-      // Cerrar el modal del documento
       setCotizacionDocumento(null);
 
-      // Confirmación de descarga
       await alerta(
         "success",
         "PDF generado",
         `Se descargó correctamente: ${nombrePDF}`
       );
 
-      // Regresar a la página de cotizaciones
       navigate("/cotizaciones");
     } catch (error) {
       console.error("Error al generar PDF:", error);
@@ -1076,7 +1164,7 @@ function Cotizaciones() {
             <strong>
               {
                 cotizaciones.filter(
-                  (c) => c.estado === "Aceptada"
+                  (c) => obtenerEstadoCotizacion(c) === "Aceptada"
                 ).length
               }
             </strong>
@@ -1093,7 +1181,7 @@ function Cotizaciones() {
             <strong>
               {
                 cotizaciones.filter(
-                  (c) => c.estado === "Enviada"
+                  (c) => obtenerEstadoCotizacion(c) === "Enviada"
                 ).length
               }
             </strong>
@@ -1173,6 +1261,8 @@ function Cotizaciones() {
                     Boolean(cotizacion.esCopia) ||
                     Boolean(cotizacion.cotizacionOrigen);
 
+                  const estado = obtenerEstadoCotizacion(cotizacion);
+
                   return (
                     <tr key={cotizacion._id}>
                       <td>
@@ -1229,10 +1319,10 @@ function Cotizaciones() {
                       <td>
                         <span
                           className={`cotizacion-estado ${obtenerClaseEstado(
-                            cotizacion.estado
+                            estado
                           )}`}
                         >
-                          {cotizacion.estado || "Borrador"}
+                          {estado}
                         </span>
                       </td>
 
@@ -1349,7 +1439,7 @@ function Cotizaciones() {
 
                 <div className="cotizacion-form-grid">
                   <label className="cotizacion-campo">
-                    <span>Cliente (opcional)</span>
+                    <span>Cliente *</span>
 
                     <div className="cotizacion-input-icono">
                       <UserRound size={17} />
@@ -1360,8 +1450,9 @@ function Cotizaciones() {
                           actualizarCampo("idCliente", e.target.value);
                           actualizarCampo("idProyecto", "");
                         }}
+                        required
                       >
-                        <option value="">Sin cliente asociado</option>
+                        <option value="">Seleccionar cliente</option>
 
                         {clientes.map((cliente) => (
                           <option
@@ -1458,9 +1549,15 @@ function Cotizaciones() {
                   <label className="cotizacion-campo">
                     <span>Forma de pago</span>
 
-                    <div className="cotizacion-anticipo-lectura">
-                      {FORMA_PAGO}
-                    </div>
+                    <textarea
+                      rows={3}
+                      maxLength={500}
+                      placeholder="Escribe las condiciones de pago..."
+                      value={formulario.anticipo}
+                      onChange={(e) =>
+                        actualizarCampo("anticipo", e.target.value)
+                      }
+                    />
                   </label>
 
                   <label className="cotizacion-campo">
@@ -1568,11 +1665,25 @@ function Cotizaciones() {
                             max="1000000"
                             step="0.0001"
                             value={concepto.ancho}
+                            onFocus={() =>
+                              manejarFocoMedida(
+                                indice,
+                                "ancho",
+                                concepto.ancho
+                              )
+                            }
                             onChange={(e) =>
                               actualizarConcepto(
                                 indice,
                                 "ancho",
                                 e.target.value
+                              )
+                            }
+                            onBlur={() =>
+                              manejarSalidaMedida(
+                                indice,
+                                "ancho",
+                                concepto.ancho
                               )
                             }
                             required
@@ -1588,11 +1699,25 @@ function Cotizaciones() {
                             max="1000000"
                             step="0.0001"
                             value={concepto.alto}
+                            onFocus={() =>
+                              manejarFocoMedida(
+                                indice,
+                                "alto",
+                                concepto.alto
+                              )
+                            }
                             onChange={(e) =>
                               actualizarConcepto(
                                 indice,
                                 "alto",
                                 e.target.value
+                              )
+                            }
+                            onBlur={() =>
+                              manejarSalidaMedida(
+                                indice,
+                                "alto",
+                                concepto.alto
                               )
                             }
                             required
@@ -1604,9 +1729,9 @@ function Cotizaciones() {
 
                           <input
                             type="number"
-                            min="0.01"
+                            min="1"
                             max="1000000"
-                            step="0.01"
+                            step="1"
                             value={concepto.cantidad}
                             onChange={(e) =>
                               actualizarConcepto(
@@ -1620,23 +1745,43 @@ function Cotizaciones() {
                         </label>
 
                         <label className="cotizacion-campo concepto-precio">
-                          <span>Precio unitario ($) *</span>
+                          <span>Precio unitario *</span>
 
-                          <input
-                            type="number"
-                            min="0"
-                            max="100000000"
-                            step="0.01"
-                            value={concepto.precioUnitario}
-                            onChange={(e) =>
-                              actualizarConcepto(
-                                indice,
-                                "precioUnitario",
-                                e.target.value
-                              )
-                            }
-                            required
-                          />
+                          <div className="cotizacion-precio-wrapper">
+                            <span className="cotizacion-precio-prefijo">
+                              $
+                            </span>
+
+                            <input
+                              className="cotizacion-input-precio"
+                              type="number"
+                              min="0"
+                              max="100000000"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={concepto.precioUnitario ?? ""}
+                              onFocus={() =>
+                                manejarFocoPrecio(
+                                  indice,
+                                  concepto.precioUnitario
+                                )
+                              }
+                              onChange={(e) =>
+                                actualizarConcepto(
+                                  indice,
+                                  "precioUnitario",
+                                  e.target.value
+                                )
+                              }
+                              onBlur={() =>
+                                manejarSalidaPrecio(
+                                  indice,
+                                  concepto.precioUnitario
+                                )
+                              }
+                              required
+                            />
+                          </div>
                         </label>
 
                         <div className="cotizacion-concepto-total">
@@ -1971,11 +2116,11 @@ function Cotizaciones() {
                               <td>{concepto.descripcion}</td>
 
                               <td>
-                                {formatoMedida(concepto.ancho)}
+                                {formatoMedida(concepto.ancho)} m
                               </td>
 
                               <td>
-                                {formatoMedida(concepto.alto)}
+                                {formatoMedida(concepto.alto)} m
                               </td>
 
                               {opcionesDocumento.cantidades && (
@@ -2015,7 +2160,7 @@ function Cotizaciones() {
 
                     <p>
                       <strong>FORMA DE PAGO:</strong>{" "}
-                      {FORMA_PAGO}
+                      {cotizacionDocumento.anticipo || FORMA_PAGO}
                     </p>
 
                     <p>

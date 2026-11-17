@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const conceptoSchema = new mongoose.Schema(
@@ -10,18 +9,41 @@ const conceptoSchema = new mongoose.Schema(
       minlength: [3, "La descripción debe tener al menos 3 caracteres."],
       maxlength: [200, "La descripción no puede superar 200 caracteres."],
     },
+
+    ancho: {
+      type: Number,
+      required: [true, "El ancho es obligatorio."],
+      min: [0, "El ancho no puede ser negativo."],
+      max: [1000000, "El ancho supera el límite permitido."],
+      default: 0,
+    },
+
+    alto: {
+      type: Number,
+      required: [true, "El alto es obligatorio."],
+      min: [0, "El alto no puede ser negativo."],
+      max: [1000000, "El alto supera el límite permitido."],
+      default: 0,
+    },
+
     cantidad: {
       type: Number,
       required: [true, "La cantidad es obligatoria."],
-      min: [0.01, "La cantidad debe ser mayor que cero."],
+      min: [1, "La cantidad debe ser al menos 1."],
       max: [1000000, "La cantidad supera el límite permitido."],
+      validate: {
+        validator: Number.isInteger,
+        message: "La cantidad debe ser un número entero.",
+      },
     },
+
     precioUnitario: {
       type: Number,
       required: [true, "El precio unitario es obligatorio."],
       min: [0, "El precio no puede ser negativo."],
       max: [100000000, "El precio supera el límite permitido."],
     },
+
     total: {
       type: Number,
       required: true,
@@ -82,7 +104,7 @@ const cotizacionSchema = new mongoose.Schema(
     anticipo: {
       type: String,
       trim: true,
-      maxlength: [500, "El anticipo no puede superar 500 caracteres."],
+      maxlength: [500, "La forma de pago no puede superar 500 caracteres."],
       default: "",
     },
 
