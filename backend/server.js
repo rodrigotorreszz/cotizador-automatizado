@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -22,43 +23,70 @@ const app = express();
 
 const PORT = process.env.PORT || 4000;
 
+// ========================================
+// ORÍGENES PERMITIDOS
+// ========================================
+
 const origenesPermitidos = [
+  // Vite - desarrollo
   "http://localhost:5173",
   "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+
+  // Vista previa
+  "http://localhost:4173",
   "http://127.0.0.1:4173",
 
-  // Aplicación de escritorio Electron
+  // Electron - aplicación de escritorio
   "app://localhost",
 ];
 
 // ========================================
-// MIDDLEWARES
+// CONFIGURACIÓN CORS
 // ========================================
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Permitir solicitudes sin origen
-      if (!origin) {
-        return callback(null, true);
-      }
+const configuracionCors = {
+  origin: function (origin, callback) {
+    // Permitir solicitudes sin origen
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      // Verificar origen autorizado
-      if (origenesPermitidos.includes(origin)) {
-        return callback(null, true);
-      }
+    // Verificar origen autorizado
+    if (origenesPermitidos.includes(origin)) {
+      return callback(null, true);
+    }
 
-      console.log("Origen bloqueado por CORS:", origin);
+    console.log("Origen bloqueado por CORS:", origin);
 
-      return callback(
-        new Error(`Origen no permitido por CORS: ${origin}`)
-      );
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+    return callback(
+      new Error(`Origen no permitido por CORS: ${origin}`)
+    );
+  },
+
+  credentials: true,
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
+};
+
+app.use(cors(configuracionCors));
+
+// ========================================
+// MIDDLEWARES
+// ========================================
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
