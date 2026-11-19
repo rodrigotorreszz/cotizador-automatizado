@@ -751,21 +751,45 @@
 .cotizacion-concepto {
   display: grid;
   grid-template-columns:
-    35px
-    minmax(180px, 1fr)
-    90px
-    90px
-    90px
-    125px
-    110px
-    35px;
-  align-items: end;
-  gap: 12px;
-  min-width: 900px;
+    34px
+    minmax(230px, 2fr)
+    minmax(155px, 1.25fr)
+    72px
+    72px
+    72px
+    112px
+    88px
+    34px;
+  align-items: start;
+  gap: 10px;
+  min-width: 1000px;
   padding: 16px;
   border: 1px solid #e5e9f0;
   border-radius: 10px;
   background: #fafbfd;
+}
+
+/* Descripción multilínea con crecimiento automático */
+.cotizacion-concepto .concepto-descripcion textarea {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+  max-height: 240px;
+  overflow-y: auto;
+  resize: none;
+  padding: 11px 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cotizacion-concepto .concepto-medida input,
+.cotizacion-concepto .concepto-cantidad input {
+  min-width: 0;
+  padding-left: 7px;
+  padding-right: 7px;
+  text-align: center;
 }
 
 .cotizacion-concepto-numero {
@@ -1167,7 +1191,26 @@
 
 .pdf-tabla {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
+}
+
+.pdf-tabla .pdf-columna-descripcion {
+  width: 28%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+  vertical-align: top;
+}
+
+.pdf-tabla .pdf-columna-ubicacion {
+  width: 18%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+  vertical-align: top;
 }
 
 .pdf-tabla th {
@@ -1479,7 +1522,7 @@
   }
 
   .cotizacion-concepto {
-    min-width: 900px;
+    min-width: 1000px;
   }
 
   .cotizacion-resumen-final {

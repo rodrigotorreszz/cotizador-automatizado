@@ -26,13 +26,25 @@ const dinero = (valor) =>
 
 const obtenerId = (valor) => {
   if (!valor) return "";
-  return typeof valor === "object" ? valor._id : valor;
+
+  return typeof valor === "object"
+    ? valor._id
+    : valor;
 };
 
 const obtenerLista = (respuesta, propiedad) => {
-  if (Array.isArray(respuesta.data)) return respuesta.data;
+  if (Array.isArray(respuesta.data)) {
+    return respuesta.data;
+  }
+
   return respuesta.data?.[propiedad] || [];
 };
+
+// Reconocer correctamente el tipo de pago.
+const obtenerTipoPago = (pago) =>
+  String(pago.tipoPago || pago.tipo || "")
+    .trim()
+    .toLowerCase();
 
 function ResumenControl() {
   const [clientes, setClientes] = useState([]);
@@ -43,6 +55,10 @@ function ResumenControl() {
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(true);
   const [actualizado, setActualizado] = useState(new Date());
+
+  // ==========================================
+  // CARGAR INFORMACIÓN
+  // ==========================================
 
   const cargarResumen = async () => {
     try {
@@ -57,7 +73,7 @@ function ResumenControl() {
         api.get("/clientes"),
         api.get("/proyectos"),
         api.get("/cotizaciones"),
-        api.get("/abonos").catch(() => ({ data: { abonos: [] } }))
+        api.get("/abonos")
       ]);
 
       setClientes(obtenerLista(resClientes, "clientes"));
@@ -66,12 +82,14 @@ function ResumenControl() {
       setAbonos(obtenerLista(resAbonos, "abonos"));
 
       setActualizado(new Date());
+
     } catch (error) {
       console.error("Error al cargar el resumen:", error);
 
       notificaciones.error(
         "No fue posible cargar el resumen de cuentas por cobrar."
       );
+
     } finally {
       setCargando(false);
     }
@@ -81,10 +99,20 @@ function ResumenControl() {
     cargarResumen();
   }, []);
 
+  // ==========================================
+  // CALCULAR RESUMEN FINANCIERO
+  // ==========================================
+
   const resumen = useMemo(() => {
-    // Obtener la cotización aceptada más reciente de cada proyecto.
+
+    // Obtener la cotización aceptada más reciente
+    // de cada proyecto.
+
     const cotizacionesAceptadas = cotizaciones
-      .filter((cotizacion) => cotizacion.estado === "Aceptada")
+      .filter(
+        (cotizacion) =>
+          cotizacion.estado === "Aceptada"
+      )
       .sort(
         (a, b) =>
           new Date(b.updatedAt || b.fecha || 0) -
@@ -96,13 +124,23 @@ function ResumenControl() {
     cotizacionesAceptadas.forEach((cotizacion) => {
       const idProyecto = obtenerId(cotizacion.idProyecto);
 
-      if (idProyecto && !cotizacionPorProyecto.has(idProyecto)) {
-        cotizacionPorProyecto.set(idProyecto, cotizacion);
+      if (
+        idProyecto &&
+        !cotizacionPorProyecto.has(idProyecto)
+      ) {
+        cotizacionPorProyecto.set(
+          idProyecto,
+          cotizacion
+        );
       }
     });
 
-    // Agrupar proyectos y pagos por cliente.
+    // ==========================================
+    // AGRUPAR PROYECTOS Y PAGOS POR CLIENTE
+    // ==========================================
+
     const filas = clientes.map((cliente) => {
+
       const proyectosCliente = proyectos.filter(
         (proyecto) =>
           obtenerId(proyecto.idCliente) === cliente._id
@@ -111,7 +149,10 @@ function ResumenControl() {
       let contratado = 0;
 
       proyectosCliente.forEach((proyecto) => {
-        const cotizacion = cotizacionPorProyecto.get(proyecto._id);
+
+        const cotizacion = cotizacionPorProyecto.get(
+          proyecto._id
+        );
 
         const montoCotizacion = Number(
           cotizacion?.totalGeneral
@@ -121,17 +162,34 @@ function ResumenControl() {
           proyecto.montoContratado
         );
 
-        // Prioridad: cotización aceptada; si no existe, monto manual.
+        // Prioridad: cotización aceptada.
+        // Si no existe, utilizar monto manual.
+
         contratado += cotizacion
-          ? (Number.isFinite(montoCotizacion) ? montoCotizacion : 0)
-          : (Number.isFinite(montoManual) ? montoManual : 0);
+          ? (
+              Number.isFinite(montoCotizacion)
+                ? montoCotizacion
+                : 0
+            )
+          : (
+              Number.isFinite(montoManual)
+                ? montoManual
+                : 0
+            );
       });
 
+      // ==========================================
+      // IDENTIFICAR PAGOS DEL CLIENTE
+      // ==========================================
+
       const proyectosIds = new Set(
-        proyectosCliente.map((proyecto) => proyecto._id)
+        proyectosCliente.map(
+          (proyecto) => proyecto._id
+        )
       );
 
       const pagosCliente = abonos.filter((abono) => {
+
         const idProyecto = obtenerId(abono.idProyecto);
         const idCliente = obtenerId(abono.idCliente);
 
@@ -141,40 +199,74 @@ function ResumenControl() {
         );
       });
 
+      // ==========================================
+      // CALCULAR ANTICIPOS
+      // ==========================================
+
       const anticipos = pagosCliente
         .filter((pago) =>
-          String(pago.tipo || "").toLowerCase().includes("anticipo")
+          obtenerTipoPago(pago).includes("anticipo")
         )
         .reduce(
           (total, pago) =>
-            total + Number(pago.monto || pago.cantidad || 0),
+            total + Number(
+              pago.monto || pago.cantidad || 0
+            ),
           0
         );
+
+      // ==========================================
+      // CALCULAR ABONOS NORMALES
+      // ==========================================
 
       const abonosTotal = pagosCliente
         .filter(
           (pago) =>
-            !String(pago.tipo || "").toLowerCase().includes("anticipo")
+            !obtenerTipoPago(pago).includes("anticipo")
         )
         .reduce(
           (total, pago) =>
-            total + Number(pago.monto || pago.cantidad || 0),
+            total + Number(
+              pago.monto || pago.cantidad || 0
+            ),
           0
         );
+
+      // ==========================================
+      // TOTAL RECIBIDO Y SALDO
+      // ==========================================
 
       const recibido = anticipos + abonosTotal;
 
       const pendientes = proyectosCliente.filter(
         (proyecto) =>
-          !["Finalizado", "Cancelado"].includes(proyecto.estado)
+          !["Finalizado", "Cancelado"].includes(
+            proyecto.estado
+          )
       ).length;
 
+      // ==========================================
+      // ÚLTIMO PAGO REGISTRADO
+      // ==========================================
+
       const fechasPagos = pagosCliente
-        .map((pago) => new Date(pago.fecha || pago.createdAt))
-        .filter((fecha) => !Number.isNaN(fecha.getTime()));
+        .map(
+          (pago) =>
+            new Date(pago.fecha || pago.createdAt)
+        )
+        .filter(
+          (fecha) =>
+            !Number.isNaN(fecha.getTime())
+        );
 
       const ultimoAbono = fechasPagos.length
-        ? new Date(Math.max(...fechasPagos.map((fecha) => fecha.getTime())))
+        ? new Date(
+            Math.max(
+              ...fechasPagos.map(
+                (fecha) => fecha.getTime()
+              )
+            )
+          )
         : null;
 
       return {
@@ -191,26 +283,36 @@ function ResumenControl() {
       };
     });
 
+    // ==========================================
+    // TOTALES GENERALES
+    // ==========================================
+
     const totalContratado = filas.reduce(
-      (total, fila) => total + fila.contratado,
+      (total, fila) =>
+        total + fila.contratado,
       0
     );
 
     const totalAnticipos = filas.reduce(
-      (total, fila) => total + fila.anticipos,
+      (total, fila) =>
+        total + fila.anticipos,
       0
     );
 
     const totalAbonos = filas.reduce(
-      (total, fila) => total + fila.abonos,
+      (total, fila) =>
+        total + fila.abonos,
       0
     );
 
-    const totalRecibido = totalAnticipos + totalAbonos;
+    const totalRecibido =
+      totalAnticipos + totalAbonos;
 
     const proyectosPendientes = proyectos.filter(
       (proyecto) =>
-        !["Finalizado", "Cancelado"].includes(proyecto.estado)
+        !["Finalizado", "Cancelado"].includes(
+          proyecto.estado
+        )
     ).length;
 
     return {
@@ -222,37 +324,70 @@ function ResumenControl() {
       saldoTotal: totalContratado - totalRecibido,
       proyectosPendientes
     };
-  }, [clientes, proyectos, cotizaciones, abonos]);
 
-  const filasFiltradas = resumen.filas.filter((fila) => {
-    const texto = busqueda.toLowerCase();
+  }, [
+    clientes,
+    proyectos,
+    cotizaciones,
+    abonos
+  ]);
 
-    return (
-      fila.nombre.toLowerCase().includes(texto) ||
-      fila.idCliente.toLowerCase().includes(texto)
-    );
-  });
+  // ==========================================
+  // FILTRAR CLIENTES
+  // ==========================================
+
+  const filasFiltradas = resumen.filas.filter(
+    (fila) => {
+
+      const texto = busqueda.toLowerCase();
+
+      return (
+        String(fila.nombre || "")
+          .toLowerCase()
+          .includes(texto) ||
+
+        String(fila.idCliente || "")
+          .toLowerCase()
+          .includes(texto)
+      );
+    }
+  );
+
+  // ==========================================
+  // RENDERIZADO
+  // ==========================================
 
   return (
     <div className="resumen-control-page">
 
+      {/* ENCABEZADO */}
+
       <header className="resumen-control-header">
+
         <div>
+
           <div className="resumen-control-titulo">
+
             <div className="resumen-control-icono">
               <TrendingUp size={25} />
             </div>
 
             <div>
-              <h1>Resumen general de cuentas por cobrar</h1>
+              <h1>
+                Resumen general de cuentas por cobrar
+              </h1>
+
               <p>
                 Control financiero y seguimiento de clientes
               </p>
             </div>
+
           </div>
 
           <div className="resumen-actualizado">
+
             <CalendarDays size={15} />
+
             <span>
               Actualizado al{" "}
               {actualizado.toLocaleDateString("es-SV")}
@@ -262,7 +397,9 @@ function ResumenControl() {
                 minute: "2-digit"
               })}
             </span>
+
           </div>
+
         </div>
 
         <button
@@ -270,107 +407,172 @@ function ResumenControl() {
           onClick={cargarResumen}
           disabled={cargando}
         >
+
           <RefreshCw
             size={17}
-            className={cargando ? "resumen-girando" : ""}
+            className={
+              cargando ? "resumen-girando" : ""
+            }
           />
+
           Actualizar
+
         </button>
+
       </header>
+
+      {/* INDICADORES GENERALES */}
 
       <section className="resumen-indicadores">
 
         <div className="resumen-card">
+
           <div className="resumen-card-icono azul">
             <FileText size={22} />
           </div>
 
           <div>
             <span>Total contratado</span>
-            <h2>{dinero(resumen.totalContratado)}</h2>
-            <small>Contratos y cotizaciones aceptadas</small>
+
+            <h2>
+              {dinero(resumen.totalContratado)}
+            </h2>
+
+            <small>
+              Contratos y cotizaciones aceptadas
+            </small>
           </div>
+
         </div>
 
         <div className="resumen-card">
+
           <div className="resumen-card-icono verde">
             <Wallet size={22} />
           </div>
 
           <div>
             <span>Total recibido</span>
-            <h2>{dinero(resumen.totalRecibido)}</h2>
+
+            <h2>
+              {dinero(resumen.totalRecibido)}
+            </h2>
+
             <small>
               Anticipos: {dinero(resumen.totalAnticipos)}
             </small>
           </div>
+
         </div>
 
         <div className="resumen-card">
+
           <div className="resumen-card-icono naranja">
             <Clock size={22} />
           </div>
 
           <div>
             <span>Cuentas por cobrar</span>
-            <h2>{dinero(resumen.saldoTotal)}</h2>
-            <small>Saldo pendiente de recibir</small>
+
+            <h2>
+              {dinero(resumen.saldoTotal)}
+            </h2>
+
+            <small>
+              Saldo pendiente de recibir
+            </small>
           </div>
+
         </div>
 
         <div className="resumen-card">
+
           <div className="resumen-card-icono morado">
             <FolderOpen size={22} />
           </div>
 
           <div>
             <span>Proyectos pendientes</span>
-            <h2>{resumen.proyectosPendientes}</h2>
-            <small>En espera o en proceso</small>
+
+            <h2>
+              {resumen.proyectosPendientes}
+            </h2>
+
+            <small>
+              En espera o en proceso
+            </small>
           </div>
+
         </div>
 
       </section>
 
+      {/* TABLA DE CLIENTES */}
+
       <section className="resumen-tabla-panel">
 
         <div className="resumen-tabla-header">
+
           <div>
             <h2>Detalle por cliente</h2>
+
             <p>
               Información financiera de los clientes registrados
             </p>
           </div>
 
           <div className="resumen-busqueda">
+
             <Search size={18} />
 
             <input
               type="text"
               placeholder="Buscar cliente o ID..."
               value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={(e) =>
+                setBusqueda(e.target.value)
+              }
             />
+
           </div>
+
         </div>
 
         {cargando ? (
+
           <div className="resumen-estado">
-            <RefreshCw className="resumen-girando" size={28} />
-            <p>Cargando información financiera...</p>
+
+            <RefreshCw
+              className="resumen-girando"
+              size={28}
+            />
+
+            <p>
+              Cargando información financiera...
+            </p>
+
           </div>
+
         ) : filasFiltradas.length === 0 ? (
+
           <div className="resumen-estado">
+
             <AlertCircle size={30} />
+
             <p>
               {busqueda
                 ? "No se encontraron clientes."
                 : "Todavía no hay clientes registrados."}
             </p>
+
           </div>
+
         ) : (
+
           <div className="resumen-tabla-scroll">
+
             <table className="resumen-tabla">
+
               <thead>
                 <tr>
                   <th>ID Cliente</th>
@@ -386,8 +588,11 @@ function ResumenControl() {
               </thead>
 
               <tbody>
+
                 {filasFiltradas.map((fila) => (
+
                   <tr key={fila.idCliente}>
+
                     <td>
                       <span className="resumen-id">
                         {fila.idCliente}
@@ -398,7 +603,9 @@ function ResumenControl() {
                       {fila.nombre}
                     </td>
 
-                    <td>{dinero(fila.contratado)}</td>
+                    <td>
+                      {dinero(fila.contratado)}
+                    </td>
 
                     <td className="resumen-positivo">
                       {dinero(fila.anticipos)}
@@ -430,40 +637,81 @@ function ResumenControl() {
 
                     <td>
                       {fila.ultimoAbono
-                        ? fila.ultimoAbono.toLocaleDateString("es-SV")
+                        ? fila.ultimoAbono.toLocaleDateString(
+                            "es-SV"
+                          )
                         : "Sin abonos"}
                     </td>
+
                   </tr>
+
                 ))}
+
               </tbody>
 
+              {/* TOTALES */}
+
               <tfoot>
+
                 <tr>
-                  <td colSpan="2">TOTAL GENERAL</td>
-                  <td>{dinero(resumen.totalContratado)}</td>
-                  <td>{dinero(resumen.totalAnticipos)}</td>
-                  <td>{dinero(resumen.totalAbonos)}</td>
-                  <td>{dinero(resumen.totalRecibido)}</td>
-                  <td>{dinero(resumen.saldoTotal)}</td>
-                  <td>{resumen.proyectosPendientes}</td>
+
+                  <td colSpan="2">
+                    TOTAL GENERAL
+                  </td>
+
+                  <td>
+                    {dinero(resumen.totalContratado)}
+                  </td>
+
+                  <td>
+                    {dinero(resumen.totalAnticipos)}
+                  </td>
+
+                  <td>
+                    {dinero(resumen.totalAbonos)}
+                  </td>
+
+                  <td>
+                    {dinero(resumen.totalRecibido)}
+                  </td>
+
+                  <td>
+                    {dinero(resumen.saldoTotal)}
+                  </td>
+
+                  <td>
+                    {resumen.proyectosPendientes}
+                  </td>
+
                   <td>—</td>
+
                 </tr>
+
               </tfoot>
+
             </table>
+
           </div>
+
         )}
 
+        {/* PIE DE TABLA */}
+
         <div className="resumen-tabla-footer">
+
           <span>
             <Users size={16} />
             {filasFiltradas.length} clientes
           </span>
+
           <span>
             {proyectos.length} proyectos registrados
           </span>
+
         </div>
 
       </section>
+
     </div>
   );
 }

@@ -38,6 +38,7 @@ const FORMA_PAGO =
 
 const conceptoVacio = () => ({
   descripcion: "",
+  ubicacion: "",
   ancho: "0",
   alto: "0",
   cantidad: "1",
@@ -119,6 +120,7 @@ const formatoMedida = (valor) =>
 
 const normalizarConcepto = (concepto = {}) => ({
   descripcion: concepto.descripcion || "",
+  ubicacion: concepto.ubicacion || "",
   ancho: String(concepto.ancho ?? 0),
   alto: String(concepto.alto ?? 0),
   cantidad: String(concepto.cantidad ?? 1),
@@ -805,6 +807,7 @@ function Cotizaciones() {
         descripcion: capitalizarPalabras(
           limpiarTexto(concepto.descripcion).trim()
         ),
+        ubicacion: capitalizarPalabras((concepto.ubicacion || "").trim()),
         ancho: Number(concepto.ancho),
         alto: Number(concepto.alto),
         cantidad: Number(concepto.cantidad),
@@ -1631,28 +1634,69 @@ function Cotizaciones() {
                         <label className="cotizacion-campo concepto-descripcion">
                           <span>Descripción *</span>
 
-                          <input
-                            type="text"
+                          <textarea
+                            rows={1}
+                            ref={(element) => {
+                              if (element) {
+                                element.style.height = "auto";
+                                element.style.height = `${Math.max(
+                                  42,
+                                  element.scrollHeight
+                                )}px`;
+                              }
+                            }}
                             maxLength={200}
                             placeholder="Ej. Ventanas de aluminio natural"
                             value={concepto.descripcion}
+                            onChange={(e) => {
+                              const texto = limpiarTexto(e.target.value);
+                              actualizarConcepto(indice, "descripcion", texto);
+
+                              // Aumenta la altura conforme el texto ocupa más líneas.
+                              e.target.style.height = "auto";
+                              e.target.style.height = `${Math.max(
+                                42,
+                                e.target.scrollHeight
+                              )}px`;
+                            }}
+                            onBlur={(e) => {
+                              const texto = capitalizarPalabras(
+                                concepto.descripcion.trim()
+                              );
+                              actualizarConcepto(indice, "descripcion", texto);
+                              e.target.style.height = "auto";
+                              e.target.style.height = `${Math.max(
+                                42,
+                                e.target.scrollHeight
+                              )}px`;
+                            }}
+                            required
+                          />
+                        </label>
+
+                        <label className="cotizacion-campo concepto-ubicacion">
+                          <span>Ubicación (opcional)</span>
+                          <input
+                            type="text"
+                            maxLength={250}
+                            placeholder="Ej. Sala, fachada norte..."
+                            value={concepto.ubicacion || ""}
                             onChange={(e) =>
                               actualizarConcepto(
                                 indice,
-                                "descripcion",
-                                limpiarTexto(e.target.value)
+                                "ubicacion",
+                                e.target.value
                               )
                             }
                             onBlur={() =>
                               actualizarConcepto(
                                 indice,
-                                "descripcion",
+                                "ubicacion",
                                 capitalizarPalabras(
-                                  concepto.descripcion.trim()
+                                  (concepto.ubicacion || "").trim()
                                 )
                               )
                             }
-                            required
                           />
                         </label>
 
@@ -2068,11 +2112,6 @@ function Cotizaciones() {
                       </p>
 
                       <p>
-                        <strong>UBICACIÓN:</strong>{" "}
-                        {cotizacionDocumento.idProyecto?.ubicacion || "—"}
-                      </p>
-
-                      <p>
                         <strong>FECHA:</strong> {fechaDocumento}
                       </p>
                     </section>
@@ -2090,7 +2129,8 @@ function Cotizaciones() {
                       <thead>
                         <tr>
                           <th>ÍTEM</th>
-                          <th>DESCRIPCIÓN</th>
+                          <th className="pdf-columna-descripcion">DESCRIPCIÓN</th>
+                          <th className="pdf-columna-ubicacion">UBICACIÓN</th>
                           <th>ANCHO (m)</th>
                           <th>ALTO (m)</th>
 
@@ -2113,7 +2153,13 @@ function Cotizaciones() {
                             <tr key={concepto._id || indice}>
                               <td>{indice + 1}</td>
 
-                              <td>{concepto.descripcion}</td>
+                              <td className="pdf-columna-descripcion">
+                                {concepto.descripcion}
+                              </td>
+
+                              <td className="pdf-columna-ubicacion">
+                                {concepto.ubicacion || "—"}
+                              </td>
 
                               <td>
                                 {formatoMedida(concepto.ancho)} m
