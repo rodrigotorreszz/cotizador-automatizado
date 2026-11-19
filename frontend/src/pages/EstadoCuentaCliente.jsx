@@ -52,6 +52,16 @@ const formatoFecha = (fecha) => {
 };
 
 // ==========================================
+// VERIFICAR ESTADO APROBADO
+// ==========================================
+
+const estaAprobado = (item) => {
+  return (
+    item?.estado?.trim().toLowerCase() === "aprobado"
+  );
+};
+
+// ==========================================
 // COMPONENTE PRINCIPAL
 // ==========================================
 
@@ -132,10 +142,23 @@ function EstadoCuentaCliente() {
     );
   }, [clientes, clienteSeleccionado]);
 
-  const proyectos = cliente?.proyectos || [];
+  // ========================================
+  // MOSTRAR SOLAMENTE PROYECTOS APROBADOS
+  // ========================================
 
-  const cotizacionesSinProyecto =
-    cliente?.cotizacionesSinProyecto || [];
+  const proyectos = useMemo(() => {
+    return (cliente?.proyectos || []).filter(estaAprobado);
+  }, [cliente]);
+
+  // ========================================
+  // MOSTRAR SOLAMENTE COTIZACIONES APROBADAS
+  // ========================================
+
+  const cotizacionesSinProyecto = useMemo(() => {
+    return (cliente?.cotizacionesSinProyecto || []).filter(
+      estaAprobado
+    );
+  }, [cliente]);
 
   // ========================================
   // OBTENER PAGOS
@@ -426,7 +449,7 @@ function EstadoCuentaCliente() {
         doc.setTextColor(...gris);
 
         doc.text(
-          "Este cliente todavía no tiene proyectos registrados.",
+          "Este cliente no tiene proyectos aprobados registrados.",
           margen,
           y
         );
@@ -441,7 +464,7 @@ function EstadoCuentaCliente() {
           (pago) => pago.tipoPago === "Anticipo"
         );
 
-        // Verificar espacio para el proyecto
+        // VERIFICAR ESPACIO PARA EL PROYECTO
 
         if (y > alto - 48) {
           doc.addPage();
@@ -630,7 +653,7 @@ function EstadoCuentaCliente() {
       });
 
       // ====================================
-      // COTIZACIONES SIN PROYECTO
+      // COTIZACIONES APROBADAS SIN PROYECTO
       // ====================================
 
       if (cotizacionesSinProyecto.length > 0) {
@@ -644,7 +667,7 @@ function EstadoCuentaCliente() {
         doc.setTextColor(...azul);
 
         doc.text(
-          `4. COTIZACIONES ACEPTADAS SIN PROYECTO (${cotizacionesSinProyecto.length})`,
+          `4. COTIZACIONES APROBADAS SIN PROYECTO (${cotizacionesSinProyecto.length})`,
           margen,
           y
         );
@@ -1158,7 +1181,7 @@ function EstadoCuentaCliente() {
                   <FolderKanban size={20} />
 
                   <h3>
-                    Detalle de proyectos
+                    Proyectos aprobados
                   </h3>
                 </div>
 
@@ -1171,7 +1194,7 @@ function EstadoCuentaCliente() {
               {proyectos.length === 0 ? (
 
                 <div className="tabla-vacia">
-                  Este cliente todavía no tiene proyectos registrados.
+                  Este cliente no tiene proyectos aprobados registrados.
                 </div>
 
               ) : (
@@ -1414,7 +1437,7 @@ function EstadoCuentaCliente() {
 
             </section>
 
-            {/* COTIZACIONES INDEPENDIENTES */}
+            {/* COTIZACIONES INDEPENDIENTES APROBADAS */}
 
             {cotizacionesSinProyecto.length > 0 && (
 
@@ -1426,7 +1449,7 @@ function EstadoCuentaCliente() {
                     <FileText size={20} />
 
                     <h3>
-                      Cotizaciones aceptadas sin proyecto
+                      Cotizaciones aprobadas sin proyecto
                     </h3>
                   </div>
 
