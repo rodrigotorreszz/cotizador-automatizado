@@ -106,7 +106,10 @@ function Abonos() {
       ]);
 
       setAbonos(respuestaAbonos.data.abonos || []);
-      setProyectos(respuestaProyectos.data.proyectos || []);
+
+      setProyectos(
+        respuestaProyectos.data.proyectos || []
+      );
 
       setResumenGeneral(
         respuestaResumen.data.resumenGeneral || {
@@ -144,11 +147,11 @@ function Abonos() {
   const proyectoSeleccionado = useMemo(() => {
     return proyectos.find(
       (proyecto) =>
-        proyecto.idProyecto === formulario.idProyecto
+        String(proyecto.idProyecto) ===
+        String(formulario.idProyecto)
     );
   }, [proyectos, formulario.idProyecto]);
 
-  // Cliente asociado al proyecto.
   const clienteSeleccionado = proyectoSeleccionado?.idCliente;
 
   // ======================================
@@ -157,15 +160,21 @@ function Abonos() {
 
   const resumenProyectoSeleccionado = useMemo(() => {
     return resumenesProyectos.find(
-      (item) => item.idProyecto === formulario.idProyecto
+      (item) =>
+        String(item.idProyecto) ===
+        String(formulario.idProyecto)
     );
   }, [resumenesProyectos, formulario.idProyecto]);
 
-  // El monto contratado puede venir de una cotización aceptada
-  // o del monto registrado directamente en el proyecto.
+  // ======================================
+  // MONTO CONTRATADO
+  // ======================================
+
+  // La fuente principal es el proyecto porque su monto
+  // se actualiza cuando una cotización es aceptada.
   const montoContratado = Number(
-    resumenProyectoSeleccionado?.montoContratado ||
-    proyectoSeleccionado?.montoContratado ||
+    proyectoSeleccionado?.montoContratado ??
+    resumenProyectoSeleccionado?.montoContratado ??
     0
   );
 
@@ -180,12 +189,14 @@ function Abonos() {
   const montoAnterior = Number(abonoEditar?.monto || 0);
 
   // ======================================
-  // CALCULAR SALDO Y EXCEDENTE EN TIEMPO REAL
+  // CALCULAR SALDO Y EXCEDENTE
   // ======================================
 
   const totalConEdicion = useMemo(() => {
     if (!proyectoSeleccionado) return 0;
 
+    // Si estamos editando un pago del mismo proyecto,
+    // primero descontamos el monto anterior.
     const pagoAnteriorDelProyecto =
       abonoEditar?.proyectoOriginal === formulario.idProyecto
         ? montoAnterior
@@ -218,6 +229,23 @@ function Abonos() {
   );
 
   // ======================================
+  // OBTENER MONTO CONTRATADO DE UN PROYECTO
+  // ======================================
+
+  const obtenerMontoContratado = (item) => {
+    const proyecto = proyectos.find(
+      (p) =>
+        String(p.idProyecto) === String(item.idProyecto)
+    );
+
+    return Number(
+      proyecto?.montoContratado ??
+      item.montoContratado ??
+      0
+    );
+  };
+
+  // ======================================
   // FILTRAR HISTORIAL
   // ======================================
 
@@ -239,7 +267,7 @@ function Abonos() {
 
       const coincideProyecto =
         filtroProyecto === "todos" ||
-        proyecto.idProyecto === filtroProyecto;
+        String(proyecto.idProyecto) === String(filtroProyecto);
 
       return coincideTexto && coincideProyecto;
     });
@@ -291,6 +319,7 @@ function Abonos() {
 
     setModalAbierto(false);
     setAbonoEditar(null);
+
     setFormulario({
       ...datosIniciales,
       fecha: fechaLocal(new Date()),
@@ -510,7 +539,13 @@ function Abonos() {
           </div>
 
           <h2>
-            {formatoMoneda(resumenGeneral.totalContratado)}
+            {formatoMoneda(
+              proyectos.reduce(
+                (total, proyecto) =>
+                  total + Number(proyecto.montoContratado || 0),
+                0
+              )
+            )}
           </h2>
 
           <p>
@@ -558,7 +593,27 @@ function Abonos() {
           </div>
 
           <h2>
-            {formatoMoneda(resumenGeneral.totalPendiente)}
+            {formatoMoneda(
+              proyectos.reduce((total, proyecto) => {
+                const resumen = resumenesProyectos.find(
+                  (item) =>
+                    String(item.idProyecto) ===
+                    String(proyecto.idProyecto)
+                );
+
+                const contratado = Number(
+                  proyecto.montoContratado ?? 0
+                );
+
+                const abonado = Number(
+                  resumen?.totalAbonado ??
+                  resumen?.totalRecibido ??
+                  0
+                );
+
+                return total + Math.max(contratado - abonado, 0);
+              }, 0)
+            )}
           </h2>
 
           <p>
@@ -582,7 +637,27 @@ function Abonos() {
           </div>
 
           <h2>
-            {formatoMoneda(resumenGeneral.totalExcedente)}
+            {formatoMoneda(
+              proyectos.reduce((total, proyecto) => {
+                const resumen = resumenesProyectos.find(
+                  (item) =>
+                    String(item.idProyecto) ===
+                    String(proyecto.idProyecto)
+                );
+
+                const contratado = Number(
+                  proyecto.montoContratado ?? 0
+                );
+
+                const abonado = Number(
+                  resumen?.totalAbonado ??
+                  resumen?.totalRecibido ??
+                  0
+                );
+
+                return total + Math.max(abonado - contratado, 0);
+              }, 0)
+            )}
           </h2>
 
           <p>
@@ -636,123 +711,141 @@ function Abonos() {
 
           <div className="abonos-projects-grid">
 
-            {resumenesProyectos.map((item) => (
+            {resumenesProyectos.map((item) => {
 
-              <article
-                className="abonos-project-card"
-                key={item.idProyecto}
-              >
+              const contratado = obtenerMontoContratado(item);
 
-                <div className="abonos-project-card-top">
+              const abonado = Number(
+                item.totalAbonado ?? item.totalRecibido ?? 0
+              );
 
-                  <div className="abonos-project-symbol">
-                    <FolderKanban size={19} />
-                  </div>
+              const pendiente = Math.max(
+                contratado - abonado,
+                0
+              );
 
-                  <span className="abonos-project-code">
-                    {item.idProyecto}
-                  </span>
+              const excedente = Math.max(
+                abonado - contratado,
+                0
+              );
 
-                </div>
+              const porcentaje = contratado > 0
+                ? (abonado / contratado) * 100
+                : 0;
 
-                <h3>{item.proyecto}</h3>
+              return (
 
-                <div className="abonos-project-client">
-                  <UserRound size={15} />
-                  <span>{item.cliente || "Sin cliente"}</span>
-                </div>
+                <article
+                  className="abonos-project-card"
+                  key={item.idProyecto}
+                >
 
-                <div className="abonos-project-values">
+                  <div className="abonos-project-card-top">
 
-                  <div>
-                    <span>Contratado</span>
+                    <div className="abonos-project-symbol">
+                      <FolderKanban size={19} />
+                    </div>
 
-                    <strong>
-                      {formatoMoneda(item.montoContratado)}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>Abonado</span>
-
-                    <strong className="amount-paid">
-                      {formatoMoneda(
-                        item.totalAbonado ?? item.totalRecibido
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>Pendiente</span>
-
-                    <strong className="amount-pending">
-                      {formatoMoneda(item.saldoPendiente)}
-                    </strong>
-                  </div>
-
-                </div>
-
-                <div className="abonos-progress-area">
-
-                  <div className="abonos-progress-info">
-
-                    <span>Avance de pago</span>
-
-                    <strong>
-                      {Number(item.porcentajePagado || 0).toFixed(1)}%
-                    </strong>
+                    <span className="abonos-project-code">
+                      {item.idProyecto}
+                    </span>
 
                   </div>
 
-                  <div className="abonos-progress-track">
+                  <h3>{item.proyecto}</h3>
 
-                    <div
-                      className="abonos-progress-fill"
-                      style={{
-                        width: `${Math.min(
-                          Number(item.porcentajePagado || 0),
-                          100
-                        )}%`,
-                      }}
-                    />
+                  <div className="abonos-project-client">
+                    <UserRound size={15} />
+                    <span>{item.cliente || "Sin cliente"}</span>
+                  </div>
+
+                  <div className="abonos-project-values">
+
+                    <div>
+                      <span>Contratado</span>
+
+                      <strong>
+                        {formatoMoneda(contratado)}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>Abonado</span>
+
+                      <strong className="amount-paid">
+                        {formatoMoneda(abonado)}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>Pendiente</span>
+
+                      <strong className="amount-pending">
+                        {formatoMoneda(pendiente)}
+                      </strong>
+                    </div>
 
                   </div>
 
-                </div>
+                  <div className="abonos-progress-area">
 
-                {item.excedente > 0 && (
+                    <div className="abonos-progress-info">
 
-                  <div className="abonos-excedent-notice">
-                    <CheckCircle2 size={15} />
+                      <span>Avance de pago</span>
 
-                    Excedente: {formatoMoneda(item.excedente)}
+                      <strong>
+                        {porcentaje.toFixed(1)}%
+                      </strong>
+
+                    </div>
+
+                    <div className="abonos-progress-track">
+
+                      <div
+                        className="abonos-progress-fill"
+                        style={{
+                          width: `${Math.min(porcentaje, 100)}%`,
+                        }}
+                      />
+
+                    </div>
+
                   </div>
 
-                )}
+                  {excedente > 0 && (
 
-                {Number(item.montoContratado) === 0 && (
+                    <div className="abonos-excedent-notice">
+                      <CheckCircle2 size={15} />
 
-                  <div className="abonos-no-reference">
-                    <AlertCircle size={15} />
+                      Excedente: {formatoMoneda(excedente)}
+                    </div>
 
-                    Sin monto contratado de referencia
+                  )}
+
+                  {contratado === 0 && (
+
+                    <div className="abonos-no-reference">
+                      <AlertCircle size={15} />
+
+                      Sin monto contratado de referencia
+                    </div>
+
+                  )}
+
+                  <div className="abonos-project-footer">
+
+                    <span>
+                      {item.cantidadPagos ?? item.cantidadAbonos ?? 0} pagos registrados
+                    </span>
+
+                    <Receipt size={16} />
+
                   </div>
 
-                )}
+                </article>
 
-                <div className="abonos-project-footer">
-
-                  <span>
-                    {item.cantidadPagos ?? item.cantidadAbonos ?? 0} pagos registrados
-                  </span>
-
-                  <Receipt size={16} />
-
-                </div>
-
-              </article>
-
-            ))}
+              );
+            })}
 
           </div>
 
@@ -1174,11 +1267,7 @@ function Abonos() {
                     <span>Saldo pendiente</span>
 
                     <strong>
-                      {formatoMoneda(
-                        abonoEditar
-                          ? saldoPendienteCalculado
-                          : resumenProyectoSeleccionado?.saldoPendiente ?? 0
-                      )}
+                      {formatoMoneda(saldoPendienteCalculado)}
                     </strong>
 
                   </div>
